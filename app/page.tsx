@@ -15,7 +15,10 @@ const formSchema = z.object({
       type: z.string(),
       is_deleted: z.number(),
       answers: z
-        .record(z.string(), z.array(z.object({ label: z.string(), content: z.string() })))
+        .record(
+          z.string(),
+          z.array(z.object({ label: z.string().optional(), content: z.string() })),
+        )
         .optional(),
       correct_answer: z.number().optional(),
     }),

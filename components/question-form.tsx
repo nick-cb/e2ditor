@@ -1,8 +1,6 @@
 import React from "react";
-import { RotateCcwIcon, RotateCwIcon, TrashIcon } from "lucide-react";
+import { RotateCcwIcon, TrashIcon } from "lucide-react";
 import { useFieldArray, useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import {
   Form,
   FormControl,
@@ -16,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { DevTool } from "@hookform/devtools";
 import { QuestionFormSchema, QuestionFormType } from "@/app/page";
 
 const QuestionType = {
@@ -169,12 +166,12 @@ export function Answer(props: AnswerProps) {
               </div>
               <FormItem>
                 {field.value === QuestionType.text.value ?
-                  <TextAnswer />
+                  <TextAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
                 : null}
                 {field.value === QuestionType.radio.value ?
                   <RadioAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
                 : null}
-                {field.value === QuestionType.text.value ?
+                {field.value === QuestionType.checkbox.value ?
                   <CheckboxAnswer />
                 : null}
               </FormItem>
@@ -203,8 +200,41 @@ function QuestionTypeRadio(props: QuestionTypeRadioProps) {
   );
 }
 
-function TextAnswer() {
-  return <Input />;
+type TextAnswerProps = {
+  questionIndex: number;
+  form: QuestionFormType;
+  isDeleted: boolean;
+};
+function TextAnswer(props: TextAnswerProps) {
+  const { questionIndex, form, isDeleted } = props;
+  const { fields, append, update } = useFieldArray({
+    control: form.control,
+    name: `question.${questionIndex}.answers.${QuestionType.text.value}`,
+  });
+
+  return (
+    <div>
+      {fields.map((f, index) => (
+        <FormItem key={f.id} className={"flex-grow mb-4"}>
+          <FormField
+            control={form.control}
+            name={`question.${questionIndex}.answers.${QuestionType.text.value}.${index}.content`}
+            render={({ field }) => {
+              return <Input onChange={field.onChange} />;
+            }}
+          />
+        </FormItem>
+      ))}
+      <Button
+        size={"sm"}
+        onClick={() => {
+          append({ content: "", is_deleted: 0 });
+        }}
+      >
+        Add Answer
+      </Button>
+    </div>
+  );
 }
 
 type RadioAnswerProps = {
@@ -227,39 +257,64 @@ function RadioAnswer(props: RadioAnswerProps) {
         render={({ field }) => {
           return (
             <RadioGroup defaultValue={"0"} onValueChange={field.onChange} className={"mb-4"}>
-              {fields.map((f, index) => (
-                <div key={f.id} className={"flex items-center gap-4"}>
-                  <div className={"flex items-center gap-4 flex-grow"}>
-                    <FormItem>
-                      <FormField
-                        control={form.control}
-                        name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.label`}
-                        render={() => {
-                          return (
-                            <FormLabel
-                              suppressContentEditableWarning
-                              contentEditable
-                              className={"outline-none w-20"}
-                            >
-                              Answer {index}
-                            </FormLabel>
-                          );
-                        }}
-                      />
-                    </FormItem>
-                    <FormItem className={"flex-grow"}>
-                      <FormField
-                        control={form.control}
-                        name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
-                        render={({ field }) => {
-                          return <Input onChange={field.onChange} />;
-                        }}
-                      />
-                    </FormItem>
+              {fields.map((f, index) => {
+                const isDeleted = f.is_deleted === 1;
+                return (
+                  <div key={f.id} className={"flex items-center gap-4"}>
+                    <div className={"flex items-center gap-4 flex-grow"}>
+                      <FormItem>
+                        <FormField
+                          control={form.control}
+                          name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.label`}
+                          render={() => {
+                            return (
+                              <FormLabel
+                                suppressContentEditableWarning
+                                contentEditable
+                                className={cn(
+                                  "outline-none w-20",
+                                  isDeleted && "italic line-through text-white/60",
+                                )}
+                              >
+                                Answer {index}
+                              </FormLabel>
+                            );
+                          }}
+                        />
+                      </FormItem>
+                      <FormItem className={"flex-grow"}>
+                        <FormField
+                          control={form.control}
+                          name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
+                          render={({ field }) => {
+                            return <Input onChange={field.onChange} disabled={isDeleted} />;
+                          }}
+                        />
+                      </FormItem>
+                    </div>
+                    <RadioGroupItem id={f.id} value={index.toString()} disabled={isDeleted} />
+                    <Button
+                      size={"sm"}
+                      variant={"ghost"}
+                      onClick={() => {
+                        const questionAnswers =
+                          form.getValues().question[questionIndex].answers?.[
+                            QuestionType.radio.value
+                          ];
+                        if (questionAnswers) {
+                          const answer = questionAnswers[index];
+                          if (answer.is_deleted === 0) update(index, { ...answer, is_deleted: 1 });
+                          if (answer.is_deleted === 1) update(index, { ...answer, is_deleted: 0 });
+                        }
+                      }}
+                    >
+                      {isDeleted ?
+                        <RotateCcwIcon />
+                      : <TrashIcon />}
+                    </Button>
                   </div>
-                  <RadioGroupItem id={f.id} value={index.toString()} disabled={isDeleted} />
-                </div>
-              ))}
+                );
+              })}
             </RadioGroup>
           );
         }}
@@ -267,7 +322,7 @@ function RadioAnswer(props: RadioAnswerProps) {
       <Button
         size={"sm"}
         onClick={() => {
-          append({ label: "", content: "" });
+          append({ label: "", content: "", is_deleted: 0 });
         }}
       >
         Add Answer
@@ -277,5 +332,9 @@ function RadioAnswer(props: RadioAnswerProps) {
 }
 
 function CheckboxAnswer() {
-  return <Button onClick={() => {}}>Add Answer</Button>;
+  return (
+    <Button size={"sm"} onClick={() => {}}>
+      Add Answer
+    </Button>
+  );
 }
