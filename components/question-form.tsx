@@ -166,7 +166,7 @@ export function Answer(props: AnswerProps) {
               </div>
               <FormItem>
                 {field.value === QuestionType.text.value ?
-                  <TextAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
+                  <TextAnswer form={form} questionIndex={index} />
                 : null}
                 {field.value === QuestionType.radio.value ?
                   <RadioAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
@@ -203,10 +203,10 @@ function QuestionTypeRadio(props: QuestionTypeRadioProps) {
 type TextAnswerProps = {
   questionIndex: number;
   form: QuestionFormType;
-  isDeleted: boolean;
 };
 function TextAnswer(props: TextAnswerProps) {
-  const { questionIndex, form, isDeleted } = props;
+  const { questionIndex, form } = props;
+  const questionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
   const { fields, append, update } = useFieldArray({
     control: form.control,
     name: `question.${questionIndex}.answers.${QuestionType.text.value}`,
@@ -214,22 +214,48 @@ function TextAnswer(props: TextAnswerProps) {
 
   return (
     <div>
-      {fields.map((f, index) => (
-        <FormItem key={f.id} className={"flex-grow mb-4"}>
-          <FormField
-            control={form.control}
-            name={`question.${questionIndex}.answers.${QuestionType.text.value}.${index}.content`}
-            render={({ field }) => {
-              return <Input onChange={field.onChange} />;
-            }}
-          />
-        </FormItem>
-      ))}
+      {fields.map((f, index) => {
+        const isDeleted = f.is_deleted === 1;
+        return (
+          <div key={f.id} className={"flex items-center gap-4 mb-4"}>
+            <FormItem className={"flex-grow"}>
+              <FormField
+                control={form.control}
+                name={`question.${questionIndex}.answers.${QuestionType.text.value}.${index}.content`}
+                render={({ field }) => {
+                  return (
+                    <Input onChange={field.onChange} disabled={questionDeleted || isDeleted} />
+                  );
+                }}
+              />
+            </FormItem>
+            <Button
+              size={"sm"}
+              variant={"ghost"}
+              onClick={() => {
+                const questionAnswers =
+                  form.getValues().question[questionIndex].answers?.[QuestionType.text.value];
+                if (questionAnswers) {
+                  const answer = questionAnswers[index];
+                  if (answer.is_deleted === 0) update(index, { ...answer, is_deleted: 1 });
+                  if (answer.is_deleted === 1) update(index, { ...answer, is_deleted: 0 });
+                }
+              }}
+              disabled={questionDeleted}
+            >
+              {isDeleted ?
+                <RotateCcwIcon />
+              : <TrashIcon />}
+            </Button>
+          </div>
+        );
+      })}
       <Button
         size={"sm"}
         onClick={() => {
           append({ content: "", is_deleted: 0 });
         }}
+        disabled={questionDeleted}
       >
         Add Answer
       </Button>
