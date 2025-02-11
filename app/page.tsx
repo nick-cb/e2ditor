@@ -44,9 +44,14 @@ const formSchema = z.object({
       name: z.string(),
       type: z.string(),
       is_deleted: z.number(),
-      answers: z.array(
-        z.object({ content: z.string(), is_correct: z.number() }),
-      ),
+      answers: z
+        .object({
+          type: z.string(),
+          list: z.array(
+            z.object({ content: z.string(), is_correct: z.number() }),
+          ),
+        })
+        .optional(),
     }),
   ),
 });
@@ -177,31 +182,42 @@ export default function Home() {
                                 <RadioGroup
                                   defaultValue={"0"}
                                   onValueChange={field.onChange}
-                                  className={"grid-cols-3 w-max"}
                                 >
-                                  {QuestionType.map((qt) => {
-                                    return (
-                                      <div
-                                        key={qt.type}
-                                        className="flex items-center space-x-2"
-                                      >
-                                        <RadioGroupItem
-                                          id={qt.type}
-                                          value={qt.value}
-                                          disabled={isDeleted}
-                                        />
-                                        <Label
-                                          htmlFor={qt.type}
-                                          className={cn(
-                                            isDeleted &&
-                                              "line-through text-white/60 italic",
-                                          )}
+                                  <div
+                                    className={"grid grid-cols-3 w-max mb-1"}
+                                  >
+                                    {QuestionType.map((qt) => {
+                                      return (
+                                        <div
+                                          key={qt.type}
+                                          className="flex items-center space-x-2"
                                         >
-                                          {qt.label}
-                                        </Label>
-                                      </div>
-                                    );
-                                  })}
+                                          <RadioGroupItem
+                                            id={qt.type}
+                                            value={qt.value}
+                                            disabled={isDeleted}
+                                          />
+                                          <Label
+                                            htmlFor={qt.type}
+                                            className={cn(
+                                              isDeleted &&
+                                                "line-through text-white/60 italic",
+                                            )}
+                                          >
+                                            {qt.label}
+                                          </Label>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <FormItem>
+                                    {field.value === "0" ? <Input /> : null}
+                                    {field.value === "1" ? (
+                                      <Button onClick={() => {}}>
+                                        Add Answer
+                                      </Button>
+                                    ) : null}
+                                  </FormItem>
                                 </RadioGroup>
                               );
                             }}
@@ -215,7 +231,7 @@ export default function Home() {
               <Button
                 type="button"
                 onClick={() => {
-                  append({ type: "0", name: "", is_deleted: 0, answers: [] });
+                  append({ type: "0", name: "", is_deleted: 0 });
                 }}
               >
                 Add Question
