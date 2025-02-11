@@ -13,6 +13,7 @@
     "@libsql/client": "^0.14.0",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-label": "^2.1.2",
+    "@radix-ui/react-radio-group": "^1.2.3",
     "@radix-ui/react-slot": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -29,6 +30,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@hookform/devtools": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
