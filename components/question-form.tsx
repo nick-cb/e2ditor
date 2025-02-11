@@ -17,45 +17,26 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { DevTool } from "@hookform/devtools";
+import { QuestionFormSchema, QuestionFormType } from "@/app/page";
 
-const QuestionType = [
-  { type: "text", value: "0", label: "Text" },
-  { type: "radio", value: "1", label: "Radio" },
-  { type: "checkbox", value: "2", label: "Checkbox" },
-];
+const QuestionType = {
+  ["text"]: { value: "0", label: "Text", index: 0 },
+  ["radio"]: { value: "1", label: "Radio", index: 1 },
+  ["checkbox"]: { value: "2", label: "Checkbox", index: 2 },
+};
 
-const formSchema = z.object({
-  question: z.array(
-    z.object({
-      name: z.string(),
-      type: z.string(),
-      is_deleted: z.number(),
-      answers: z
-        .object({
-          type: z.string(),
-          list: z.array(
-            z.object({ content: z.string(), is_correct: z.number() }),
-          ),
-        })
-        .optional(),
-    }),
-  ),
-});
-
-export function QuestionForm() {
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      question: [],
-    },
-  });
+type QuestionFormProps = {
+  form: QuestionFormType;
+};
+export function QuestionForm(props: QuestionFormProps) {
+  const { form } = props;
   const { fields, append, update } = useFieldArray({
     control: form.control,
     name: "question",
   });
 
   // 2. Define a submit handler.
-  function onSubmit(values: z.infer<typeof formSchema>) {
+  function onSubmit(values: QuestionFormSchema) {
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
     console.log(values);
@@ -68,69 +49,9 @@ export function QuestionForm() {
             const isDeleted = fieldData.is_deleted === 1;
             return (
               <React.Fragment key={fieldData.id}>
-                <div
-                  key={fieldData.id}
-                  className={"border-dashed border p-4 flex flex-col gap-3"}
-                >
-                  <QuestionName
-                    index={index}
-                    isDeleted={isDeleted}
-                    form={form}
-                    update={update}
-                  />
-                  <FormItem>
-                    <FormLabel
-                      className={cn(
-                        isDeleted && "line-through text-white/60 italic",
-                      )}
-                    >
-                      Answer
-                    </FormLabel>
-                    <FormField
-                      control={form.control}
-                      name={`question.${index}.type`}
-                      render={({ field }) => {
-                        return (
-                          <RadioGroup
-                            defaultValue={"0"}
-                            onValueChange={field.onChange}
-                          >
-                            <div className={"grid grid-cols-3 w-max mb-1"}>
-                              {QuestionType.map((qt) => {
-                                return (
-                                  <div
-                                    key={qt.type}
-                                    className="flex items-center space-x-2"
-                                  >
-                                    <RadioGroupItem
-                                      id={qt.type}
-                                      value={qt.value}
-                                      disabled={isDeleted}
-                                    />
-                                    <Label
-                                      htmlFor={qt.type}
-                                      className={cn(
-                                        isDeleted &&
-                                          "line-through text-white/60 italic",
-                                      )}
-                                    >
-                                      {qt.label}
-                                    </Label>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <FormItem>
-                              {field.value === "0" ? <Input /> : null}
-                              {field.value === "1" ? (
-                                <Button onClick={() => {}}>Add Answer</Button>
-                              ) : null}
-                            </FormItem>
-                          </RadioGroup>
-                        );
-                      }}
-                    />
-                  </FormItem>
+                <div key={fieldData.id} className={"border-dashed border p-4 flex flex-col gap-3"}>
+                  <QuestionName index={index} isDeleted={isDeleted} form={form} update={update} />
+                  <Answer index={index} isDeleted={isDeleted} form={form} />
                 </div>
               </React.Fragment>
             );
@@ -139,13 +60,17 @@ export function QuestionForm() {
         <Button
           type="button"
           onClick={() => {
-            append({ type: "0", name: "", is_deleted: 0 });
+            append({
+              type: "0",
+              name: "",
+              is_deleted: 0,
+            });
           }}
         >
           Add Question
         </Button>
       </form>
-      <DevTool control={form.control} />
+      {/* <DevTool control={form.control} /> */}
     </Form>
   );
 }
@@ -153,8 +78,8 @@ export function QuestionForm() {
 type QuestionNameProps = {
   index: number;
   isDeleted: boolean;
-  form: ReturnType<typeof useForm<z.infer<typeof formSchema>>>;
-  update: ReturnType<typeof useFieldArray<z.infer<typeof formSchema>>>['update'];
+  form: QuestionFormType;
+  update: ReturnType<typeof useFieldArray<QuestionFormSchema>>["update"];
 };
 export function QuestionName(props: QuestionNameProps) {
   const { form, index, isDeleted, update } = props;
@@ -167,9 +92,7 @@ export function QuestionName(props: QuestionNameProps) {
         return (
           <FormItem>
             <div className={"flex gap-2 items-center"}>
-              <FormLabel
-                className={cn(isDeleted && "line-through italic text-white/60")}
-              >
+              <FormLabel className={cn(isDeleted && "line-through italic text-white/60")}>
                 Question {index + 1}
               </FormLabel>
               <Button
@@ -189,7 +112,9 @@ export function QuestionName(props: QuestionNameProps) {
                 variant={"ghost"}
                 size={"sm"}
               >
-                {isDeleted ? <RotateCcwIcon /> : <TrashIcon />}
+                {isDeleted ?
+                  <RotateCcwIcon />
+                : <TrashIcon />}
               </Button>
             </div>
             <FormControl>
@@ -206,4 +131,151 @@ export function QuestionName(props: QuestionNameProps) {
       }}
     />
   );
+}
+
+type AnswerProps = {
+  index: number;
+  isDeleted: boolean;
+  form: QuestionFormType;
+};
+export function Answer(props: AnswerProps) {
+  const { index, isDeleted, form } = props;
+
+  return (
+    <FormItem>
+      <FormLabel className={cn(isDeleted && "line-through text-white/60 italic")}>Answer</FormLabel>
+      <FormField
+        control={form.control}
+        name={`question.${index}.type`}
+        render={({ field }) => {
+          return (
+            <RadioGroup defaultValue={field.value} onValueChange={field.onChange}>
+              <div className={"grid grid-cols-3 w-max mb-1"}>
+                <QuestionTypeRadio
+                  label={QuestionType.text.label}
+                  type={QuestionType.text.value}
+                  isDeleted={isDeleted}
+                />
+                <QuestionTypeRadio
+                  label={QuestionType.radio.label}
+                  type={QuestionType.radio.value}
+                  isDeleted={isDeleted}
+                />
+                <QuestionTypeRadio
+                  label={QuestionType.checkbox.label}
+                  type={QuestionType.checkbox.value}
+                  isDeleted={isDeleted}
+                />
+              </div>
+              <FormItem>
+                {field.value === QuestionType.text.value ?
+                  <TextAnswer />
+                : null}
+                {field.value === QuestionType.radio.value ?
+                  <RadioAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
+                : null}
+                {field.value === QuestionType.text.value ?
+                  <CheckboxAnswer />
+                : null}
+              </FormItem>
+            </RadioGroup>
+          );
+        }}
+      />
+    </FormItem>
+  );
+}
+
+type QuestionTypeRadioProps = {
+  label: string;
+  type: string;
+  isDeleted: boolean;
+};
+function QuestionTypeRadio(props: QuestionTypeRadioProps) {
+  const { label, type, isDeleted } = props;
+  return (
+    <div key={type} className="flex items-center space-x-2">
+      <RadioGroupItem id={type} value={type} disabled={isDeleted} />
+      <Label htmlFor={type} className={cn(isDeleted && "line-through text-white/60 italic")}>
+        {label}
+      </Label>
+    </div>
+  );
+}
+
+function TextAnswer() {
+  return <Input />;
+}
+
+type RadioAnswerProps = {
+  questionIndex: number;
+  form: QuestionFormType;
+  isDeleted: boolean;
+};
+function RadioAnswer(props: RadioAnswerProps) {
+  const { questionIndex, form, isDeleted } = props;
+  const { fields, append, update } = useFieldArray({
+    control: form.control,
+    name: `question.${questionIndex}.answers.${QuestionType.radio.value}`,
+  });
+
+  return (
+    <div>
+      <FormField
+        control={form.control}
+        name={`question.${questionIndex}.correct_answer`}
+        render={({ field }) => {
+          return (
+            <RadioGroup defaultValue={"0"} onValueChange={field.onChange} className={"mb-4"}>
+              {fields.map((f, index) => (
+                <div key={f.id} className={"flex items-center gap-4"}>
+                  <div className={"flex items-center gap-4 flex-grow"}>
+                    <FormItem>
+                      <FormField
+                        control={form.control}
+                        name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.label`}
+                        render={() => {
+                          return (
+                            <FormLabel
+                              suppressContentEditableWarning
+                              contentEditable
+                              className={"outline-none w-20"}
+                            >
+                              Answer {index}
+                            </FormLabel>
+                          );
+                        }}
+                      />
+                    </FormItem>
+                    <FormItem className={"flex-grow"}>
+                      <FormField
+                        control={form.control}
+                        name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
+                        render={({ field }) => {
+                          return <Input onChange={field.onChange} />;
+                        }}
+                      />
+                    </FormItem>
+                  </div>
+                  <RadioGroupItem id={f.id} value={index.toString()} disabled={isDeleted} />
+                </div>
+              ))}
+            </RadioGroup>
+          );
+        }}
+      />
+      <Button
+        size={"sm"}
+        onClick={() => {
+          append({ label: "", content: "" });
+        }}
+      >
+        Add Answer
+      </Button>
+    </div>
+  );
+}
+
+function CheckboxAnswer() {
+  return <Button onClick={() => {}}>Add Answer</Button>;
 }
