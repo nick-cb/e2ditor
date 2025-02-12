@@ -18,6 +18,7 @@ const formSchema = z.object({
         z.object({ label: z.string().optional(), content: z.string(), is_deleted: z.number() }),
       ),
       correct_answer: z.number().optional(),
+      min_answer: z.number().optional()
     }),
   ),
 });

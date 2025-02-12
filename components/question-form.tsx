@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
 import { QuestionFormSchema, QuestionFormType } from "@/app/page";
+import { Checkbox } from "./ui/checkbox";
 
 const QuestionType = {
   ["text"]: { value: "0", label: "Text", index: 0 },
@@ -43,7 +44,6 @@ export function QuestionForm(props: QuestionFormProps) {
         <FieldArrayProvider fieldArray={fieldArray}>
           <div className={"flex flex-col gap-4 mb-4"}>
             {fields.map((fieldData, index) => {
-              const isDeleted = fieldData.is_deleted === 1;
               return (
                 <React.Fragment key={fieldData.id}>
                   <div
@@ -201,6 +201,33 @@ function TextAnswer(props: TextAnswerProps) {
 
   return (
     <FieldArrayProvider fieldArray={fieldArray}>
+      <FormField
+        control={form.control}
+        name={`question.${questionIndex}.min_answer`}
+        render={({ field }) => {
+          return (
+            <FormItem className={"flex items-center gap-2 space-y-0"}>
+              <FormLabel>Min answer</FormLabel>
+              <FormControl>
+                <Input
+                  type={"number"}
+                  min={0}
+                  className={"w-20"}
+                  value={field.value}
+                  onInput={(event) => {
+                    event.preventDefault();
+                    console.log(event.currentTarget.valueAsNumber);
+                    if (isNaN(event.currentTarget.valueAsNumber)) {
+                      // @ts-ignore
+                      event.currentTarget.value = field.value;
+                    }
+                  }}
+                />
+              </FormControl>
+            </FormItem>
+          );
+        }}
+      />
       <div>
         {fields.map((f, index) => {
           const isDeleted = f.is_deleted === 1;
