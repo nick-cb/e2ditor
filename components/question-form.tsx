@@ -1,6 +1,6 @@
-import React from "react";
+import React, { createContext, useContext } from "react";
 import { RotateCcwIcon, TrashIcon } from "lucide-react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { useFieldArray, useForm, useFormContext } from "react-hook-form";
 import {
   Form,
   FormControl,
@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { QuestionFormSchema, QuestionFormType } from "@/app/page";
 
@@ -27,10 +26,11 @@ type QuestionFormProps = {
 };
 export function QuestionForm(props: QuestionFormProps) {
   const { form } = props;
-  const { fields, append, update } = useFieldArray({
+  const fieldArray = useFieldArray({
     control: form.control,
     name: "question",
   });
+  const { fields, append, update } = fieldArray;
 
   // 2. Define a submit handler.
   function onSubmit(values: QuestionFormSchema) {
@@ -41,19 +41,24 @@ export function QuestionForm(props: QuestionFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
-        <div className={"flex flex-col gap-4 mb-4"}>
-          {fields.map((fieldData, index) => {
-            const isDeleted = fieldData.is_deleted === 1;
-            return (
-              <React.Fragment key={fieldData.id}>
-                <div key={fieldData.id} className={"border-dashed border p-4 flex flex-col gap-3"}>
-                  <QuestionName index={index} isDeleted={isDeleted} form={form} update={update} />
-                  <Answer index={index} isDeleted={isDeleted} form={form} />
-                </div>
-              </React.Fragment>
-            );
-          })}
-        </div>
+        <FieldArrayProvider fieldArray={fieldArray}>
+          <div className={"flex flex-col gap-4 mb-4"}>
+            {fields.map((fieldData, index) => {
+              const isDeleted = fieldData.is_deleted === 1;
+              return (
+                <React.Fragment key={fieldData.id}>
+                  <div
+                    key={fieldData.id}
+                    className={"border-dashed border p-4 flex flex-col gap-3"}
+                  >
+                    <QuestionName index={index} />
+                    <Answer index={index} />
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </FieldArrayProvider>
         <Button
           type="button"
           onClick={() => {
@@ -61,6 +66,11 @@ export function QuestionForm(props: QuestionFormProps) {
               type: "0",
               name: "",
               is_deleted: 0,
+              answers: {
+                [QuestionType.text.value]: [],
+                [QuestionType.radio.value]: [],
+                [QuestionType.checkbox.value]: [],
+              },
             });
           }}
         >
@@ -74,12 +84,11 @@ export function QuestionForm(props: QuestionFormProps) {
 
 type QuestionNameProps = {
   index: number;
-  isDeleted: boolean;
-  form: QuestionFormType;
-  update: ReturnType<typeof useFieldArray<QuestionFormSchema>>["update"];
 };
 export function QuestionName(props: QuestionNameProps) {
-  const { form, index, isDeleted, update } = props;
+  const { index } = props;
+  const form = useFormContext<QuestionFormSchema>();
+  const isQuestionDeleted = form.getValues().question[index].is_deleted === 1;
 
   return (
     <FormField
@@ -89,37 +98,17 @@ export function QuestionName(props: QuestionNameProps) {
         return (
           <FormItem>
             <div className={"flex gap-2 items-center"}>
-              <FormLabel className={cn(isDeleted && "line-through italic text-white/60")}>
+              <FormLabel className={cn(isQuestionDeleted && "line-through italic text-white/60")}>
                 Question {index + 1}
               </FormLabel>
-              <Button
-                onClick={() => {
-                  if (isDeleted) {
-                    update(index, {
-                      ...form.getValues().question[index],
-                      is_deleted: 0,
-                    });
-                  } else {
-                    update(index, {
-                      ...form.getValues().question[index],
-                      is_deleted: 1,
-                    });
-                  }
-                }}
-                variant={"ghost"}
-                size={"sm"}
-              >
-                {isDeleted ?
-                  <RotateCcwIcon />
-                : <TrashIcon />}
-              </Button>
+              <RestoreQuestionButton index={index} />
             </div>
             <FormControl>
               <Input
-                placeholder="shadcn"
+                placeholder="Enter question here"
                 {...field}
-                disabled={isDeleted}
-                className={cn(isDeleted && "italic line-through")}
+                disabled={isQuestionDeleted}
+                className={cn(isQuestionDeleted && "italic line-through")}
               />
             </FormControl>
             <FormMessage />
@@ -132,15 +121,17 @@ export function QuestionName(props: QuestionNameProps) {
 
 type AnswerProps = {
   index: number;
-  isDeleted: boolean;
-  form: QuestionFormType;
 };
 export function Answer(props: AnswerProps) {
-  const { index, isDeleted, form } = props;
+  const { index } = props;
+  const form = useFormContext<QuestionFormSchema>();
+  const isQuestionDeleted = form.getValues().question[index].is_deleted === 1;
 
   return (
     <FormItem>
-      <FormLabel className={cn(isDeleted && "line-through text-white/60 italic")}>Answer</FormLabel>
+      <FormLabel className={cn(isQuestionDeleted && "line-through text-white/60 italic")}>
+        Answer
+      </FormLabel>
       <FormField
         control={form.control}
         name={`question.${index}.type`}
@@ -151,17 +142,17 @@ export function Answer(props: AnswerProps) {
                 <QuestionTypeRadio
                   label={QuestionType.text.label}
                   type={QuestionType.text.value}
-                  isDeleted={isDeleted}
+                  isDeleted={isQuestionDeleted}
                 />
                 <QuestionTypeRadio
                   label={QuestionType.radio.label}
                   type={QuestionType.radio.value}
-                  isDeleted={isDeleted}
+                  isDeleted={isQuestionDeleted}
                 />
                 <QuestionTypeRadio
                   label={QuestionType.checkbox.label}
                   type={QuestionType.checkbox.value}
-                  isDeleted={isDeleted}
+                  isDeleted={isQuestionDeleted}
                 />
               </div>
               <FormItem>
@@ -193,9 +184,9 @@ function QuestionTypeRadio(props: QuestionTypeRadioProps) {
   return (
     <div key={type} className="flex items-center space-x-2">
       <RadioGroupItem id={type} value={type} disabled={isDeleted} />
-      <Label htmlFor={type} className={cn(isDeleted && "line-through text-white/60 italic")}>
+      <FormLabel htmlFor={type} className={cn(isDeleted && "line-through text-white/60 italic")}>
         {label}
-      </Label>
+      </FormLabel>
     </div>
   );
 }
@@ -207,59 +198,50 @@ type TextAnswerProps = {
 function TextAnswer(props: TextAnswerProps) {
   const { questionIndex, form } = props;
   const questionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
-  const { fields, append, update } = useFieldArray({
+  const fieldArray = useFieldArray({
     control: form.control,
     name: `question.${questionIndex}.answers.${QuestionType.text.value}`,
   });
+  console.log(form.getValues());
+  const { fields, append } = fieldArray;
 
   return (
-    <div>
-      {fields.map((f, index) => {
-        const isDeleted = f.is_deleted === 1;
-        return (
-          <div key={f.id} className={"flex items-center gap-4 mb-4"}>
-            <FormItem className={"flex-grow"}>
+    <FieldArrayProvider fieldArray={fieldArray}>
+      <div>
+        {fields.map((f, index) => {
+          const isDeleted = f.is_deleted === 1;
+          return (
+            <div key={f.id} className={"flex items-center gap-4 mb-4"}>
               <FormField
                 control={form.control}
                 name={`question.${questionIndex}.answers.${QuestionType.text.value}.${index}.content`}
                 render={({ field }) => {
                   return (
-                    <Input onChange={field.onChange} disabled={questionDeleted || isDeleted} />
+                    <FormItem className={"flex-grow"}>
+                      <Input onChange={field.onChange} disabled={questionDeleted || isDeleted} />
+                    </FormItem>
                   );
                 }}
               />
-            </FormItem>
-            <Button
-              size={"sm"}
-              variant={"ghost"}
-              onClick={() => {
-                const questionAnswers =
-                  form.getValues().question[questionIndex].answers?.[QuestionType.text.value];
-                if (questionAnswers) {
-                  const answer = questionAnswers[index];
-                  if (answer.is_deleted === 0) update(index, { ...answer, is_deleted: 1 });
-                  if (answer.is_deleted === 1) update(index, { ...answer, is_deleted: 0 });
-                }
-              }}
-              disabled={questionDeleted}
-            >
-              {isDeleted ?
-                <RotateCcwIcon />
-              : <TrashIcon />}
-            </Button>
-          </div>
-        );
-      })}
-      <Button
-        size={"sm"}
-        onClick={() => {
-          append({ content: "", is_deleted: 0 });
-        }}
-        disabled={questionDeleted}
-      >
-        Add Answer
-      </Button>
-    </div>
+              <RestoreAnswerButton
+                questionIndex={questionIndex}
+                answerIndex={index}
+                type={"text"}
+              />
+            </div>
+          );
+        })}
+        <Button
+          size={"sm"}
+          onClick={() => {
+            append({ content: "", is_deleted: 0 });
+          }}
+          disabled={questionDeleted}
+        >
+          Add Answer
+        </Button>
+      </div>
+    </FieldArrayProvider>
   );
 }
 
@@ -270,103 +252,84 @@ type RadioAnswerProps = {
 function RadioAnswer(props: RadioAnswerProps) {
   const { questionIndex, form } = props;
   const questionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
-  console.log({ questionDeleted });
-  const { fields, append, update } = useFieldArray({
+  const fieldArray = useFieldArray({
     control: form.control,
     name: `question.${questionIndex}.answers.${QuestionType.radio.value}`,
   });
+  const { fields, append, update } = fieldArray;
 
   return (
-    <div>
-      <FormField
-        control={form.control}
-        name={`question.${questionIndex}.correct_answer`}
-        render={({ field }) => {
-          return (
-            <RadioGroup defaultValue={"0"} onValueChange={field.onChange} className={"mb-4"}>
-              {fields.map((f, index) => {
-                const isDeleted = f.is_deleted === 1;
-                console.log({ questionDeleted, isDeleted, result: !questionDeleted && !isDeleted });
-                return (
-                  <div key={f.id} className={"flex items-center gap-4"}>
-                    <div className={"flex items-center gap-4 flex-grow"}>
-                      <FormItem>
-                        <FormField
-                          control={form.control}
-                          name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.label`}
-                          render={() => {
-                            return (
-                              <FormLabel
-                                suppressContentEditableWarning
-                                contentEditable={!questionDeleted && !isDeleted}
-                                className={cn(
-                                  "outline-none w-20",
-                                  (questionDeleted || isDeleted) &&
-                                    "italic line-through text-white/60",
-                                )}
-                              >
-                                Answer {index}
-                              </FormLabel>
-                            );
-                          }}
-                        />
-                      </FormItem>
-                      <FormItem className={"flex-grow"}>
-                        <FormField
-                          control={form.control}
-                          name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
-                          render={({ field }) => {
-                            return (
-                              <Input
-                                onChange={field.onChange}
-                                disabled={questionDeleted || isDeleted}
-                              />
-                            );
-                          }}
-                        />
-                      </FormItem>
+    <FieldArrayProvider fieldArray={fieldArray}>
+      <div>
+        <FormField
+          control={form.control}
+          name={`question.${questionIndex}.correct_answer`}
+          render={({ field }) => {
+            return (
+              <RadioGroup defaultValue={"0"} onValueChange={field.onChange} className={"mb-4"}>
+                {fields.map((f, index) => {
+                  const isDeleted = f.is_deleted === 1;
+                  return (
+                    <div key={f.id} className={"flex items-center gap-4"}>
+                      <div className={"flex items-center gap-4 flex-grow"}>
+                        <FormItem>
+                          <FormField
+                            control={form.control}
+                            name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.label`}
+                            render={() => {
+                              return (
+                                <AnswerLabel
+                                  questionIndex={questionIndex}
+                                  answerIndex={index}
+                                  type={"radio"}
+                                />
+                              );
+                            }}
+                          />
+                        </FormItem>
+                        <FormItem className={"flex-grow"}>
+                          <FormField
+                            control={form.control}
+                            name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
+                            render={({ field }) => {
+                              return (
+                                <Input
+                                  onChange={field.onChange}
+                                  disabled={questionDeleted || isDeleted}
+                                />
+                              );
+                            }}
+                          />
+                        </FormItem>
+                      </div>
+                      <RadioGroupItem
+                        id={f.id}
+                        value={index.toString()}
+                        disabled={questionDeleted || isDeleted}
+                      />
+                      <RestoreAnswerButton
+                        questionIndex={questionIndex}
+                        answerIndex={index}
+                        type={"radio"}
+                      />
                     </div>
-                    <RadioGroupItem
-                      id={f.id}
-                      value={index.toString()}
-                      disabled={questionDeleted || isDeleted}
-                    />
-                    <Button
-                      size={"sm"}
-                      variant={"ghost"}
-                      onClick={() => {
-                        const questionAnswers =
-                          form.getValues().question[questionIndex].answers?.[
-                            QuestionType.radio.value
-                          ];
-                        if (questionAnswers) {
-                          const answer = questionAnswers[index];
-                          if (answer.is_deleted === 0) update(index, { ...answer, is_deleted: 1 });
-                          if (answer.is_deleted === 1) update(index, { ...answer, is_deleted: 0 });
-                        }
-                      }}
-                      disabled={questionDeleted || isDeleted}
-                    >
-                      {isDeleted ?
-                        <RotateCcwIcon />
-                      : <TrashIcon />}
-                    </Button>
-                  </div>
-                );
-              })}
-            </RadioGroup>
-          );
-        }}
-      />
-      <Button
-        size={"sm"}
-        onClick={() => {
-          append({ label: "", content: "", is_deleted: 0 });
-        }}
-      >
-        Add Answer
-      </Button>
-    </div>
+                  );
+                })}
+              </RadioGroup>
+            );
+          }}
+        />
+        <Button
+          size={"sm"}
+          onClick={() => {
+            append({ label: "", content: "", is_deleted: 0 });
+          }}
+          disabled={questionDeleted}
+        >
+          Add Answer
+        </Button>
+      </div>
+    </FieldArrayProvider>
   );
 }
 
@@ -375,5 +338,124 @@ function CheckboxAnswer() {
     <Button size={"sm"} onClick={() => {}}>
       Add Answer
     </Button>
+  );
+}
+
+type RestoreButtonProps = { index: number };
+function RestoreQuestionButton(props: RestoreButtonProps) {
+  const { index } = props;
+  const form = useFormContext<QuestionFormSchema>();
+  const isQuestionDeleted = form.getValues().question[index].is_deleted === 1;
+  const fieldArray = useFieldArrayContext();
+  if (!fieldArray) return null;
+  const { update } = fieldArray;
+
+  return (
+    <Button
+      variant={"ghost"}
+      size={"sm"}
+      onClick={() => {
+        if (isQuestionDeleted) {
+          update(index, {
+            ...form.getValues().question[index],
+            is_deleted: 0,
+          });
+        } else {
+          update(index, {
+            ...form.getValues().question[index],
+            is_deleted: 1,
+          });
+        }
+      }}
+    >
+      {isQuestionDeleted ?
+        <RotateCcwIcon />
+      : <TrashIcon />}
+    </Button>
+  );
+}
+
+type RestoreAnswerButtonProps = {
+  questionIndex: number;
+  answerIndex: number;
+  type: keyof typeof QuestionType;
+};
+function RestoreAnswerButton(props: RestoreAnswerButtonProps) {
+  const { questionIndex, answerIndex, type } = props;
+  const form = useFormContext<QuestionFormSchema>();
+  const isQuestionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
+  const questionAnswers =
+    form.getValues().question[questionIndex].answers?.[QuestionType[type].value] ?? [];
+  const answer = questionAnswers[answerIndex];
+  const fieldArray = useFieldArrayContext();
+
+  console.log(questionAnswers, answerIndex, answer);
+  if (!answer || !fieldArray) return null;
+
+  const isAnswerDeleted = answer.is_deleted === 1;
+  const { update } = fieldArray;
+
+  return (
+    <Button
+      size={"sm"}
+      variant={"ghost"}
+      disabled={isQuestionDeleted}
+      onClick={() => {
+        if (questionAnswers) {
+          if (answer.is_deleted === 0) update(answerIndex, { ...answer, is_deleted: 1 });
+          if (answer.is_deleted === 1) update(answerIndex, { ...answer, is_deleted: 0 });
+        }
+      }}
+    >
+      {isAnswerDeleted ?
+        <RotateCcwIcon />
+      : <TrashIcon />}
+    </Button>
+  );
+}
+
+const fieldArrayContext = createContext<{
+  fieldArray: ReturnType<typeof useFieldArray<QuestionFormSchema>> | null;
+}>({ fieldArray: null });
+function FieldArrayProvider(
+  props: React.PropsWithChildren<{
+    fieldArray: ReturnType<typeof useFieldArray<QuestionFormSchema>>;
+  }>,
+) {
+  const { children, fieldArray } = props;
+  return <fieldArrayContext.Provider value={{ fieldArray }}>{children}</fieldArrayContext.Provider>;
+}
+
+function useFieldArrayContext() {
+  return useContext(fieldArrayContext).fieldArray;
+}
+
+type AnswerLabelProps = {
+  questionIndex: number;
+  answerIndex: number;
+  type: keyof typeof QuestionType;
+};
+function AnswerLabel(props: AnswerLabelProps) {
+  const { questionIndex, answerIndex, type } = props;
+  const form = useFormContext<QuestionFormSchema>();
+  const questionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
+  const questionAnswers =
+    form.getValues().question[questionIndex].answers?.[QuestionType[type].value] ?? [];
+  const answer = questionAnswers[answerIndex];
+  if (!answer) return null;
+
+  const isAnswerDeleted = answer.is_deleted === 1;
+
+  return (
+    <FormLabel
+      suppressContentEditableWarning
+      contentEditable={!questionDeleted && !isAnswerDeleted}
+      className={cn(
+        "outline-none w-20",
+        (questionDeleted || isAnswerDeleted) && "italic line-through text-white/60",
+      )}
+    >
+      Answer {answerIndex}
+    </FormLabel>
   );
 }
