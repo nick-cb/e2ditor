@@ -169,7 +169,7 @@ export function Answer(props: AnswerProps) {
                   <TextAnswer form={form} questionIndex={index} />
                 : null}
                 {field.value === QuestionType.radio.value ?
-                  <RadioAnswer form={form} questionIndex={index} isDeleted={isDeleted} />
+                  <RadioAnswer form={form} questionIndex={index} />
                 : null}
                 {field.value === QuestionType.checkbox.value ?
                   <CheckboxAnswer />
@@ -266,10 +266,11 @@ function TextAnswer(props: TextAnswerProps) {
 type RadioAnswerProps = {
   questionIndex: number;
   form: QuestionFormType;
-  isDeleted: boolean;
 };
 function RadioAnswer(props: RadioAnswerProps) {
-  const { questionIndex, form, isDeleted } = props;
+  const { questionIndex, form } = props;
+  const questionDeleted = form.getValues().question[questionIndex].is_deleted === 1;
+  console.log({ questionDeleted });
   const { fields, append, update } = useFieldArray({
     control: form.control,
     name: `question.${questionIndex}.answers.${QuestionType.radio.value}`,
@@ -285,6 +286,7 @@ function RadioAnswer(props: RadioAnswerProps) {
             <RadioGroup defaultValue={"0"} onValueChange={field.onChange} className={"mb-4"}>
               {fields.map((f, index) => {
                 const isDeleted = f.is_deleted === 1;
+                console.log({ questionDeleted, isDeleted, result: !questionDeleted && !isDeleted });
                 return (
                   <div key={f.id} className={"flex items-center gap-4"}>
                     <div className={"flex items-center gap-4 flex-grow"}>
@@ -296,10 +298,11 @@ function RadioAnswer(props: RadioAnswerProps) {
                             return (
                               <FormLabel
                                 suppressContentEditableWarning
-                                contentEditable
+                                contentEditable={!questionDeleted && !isDeleted}
                                 className={cn(
                                   "outline-none w-20",
-                                  isDeleted && "italic line-through text-white/60",
+                                  (questionDeleted || isDeleted) &&
+                                    "italic line-through text-white/60",
                                 )}
                               >
                                 Answer {index}
@@ -313,12 +316,21 @@ function RadioAnswer(props: RadioAnswerProps) {
                           control={form.control}
                           name={`question.${questionIndex}.answers.${QuestionType.radio.value}.${index}.content`}
                           render={({ field }) => {
-                            return <Input onChange={field.onChange} disabled={isDeleted} />;
+                            return (
+                              <Input
+                                onChange={field.onChange}
+                                disabled={questionDeleted || isDeleted}
+                              />
+                            );
                           }}
                         />
                       </FormItem>
                     </div>
-                    <RadioGroupItem id={f.id} value={index.toString()} disabled={isDeleted} />
+                    <RadioGroupItem
+                      id={f.id}
+                      value={index.toString()}
+                      disabled={questionDeleted || isDeleted}
+                    />
                     <Button
                       size={"sm"}
                       variant={"ghost"}
@@ -333,6 +345,7 @@ function RadioAnswer(props: RadioAnswerProps) {
                           if (answer.is_deleted === 1) update(index, { ...answer, is_deleted: 0 });
                         }
                       }}
+                      disabled={questionDeleted || isDeleted}
                     >
                       {isDeleted ?
                         <RotateCcwIcon />
