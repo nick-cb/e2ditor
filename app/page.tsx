@@ -14,14 +14,9 @@ const formSchema = z.object({
       name: z.string(),
       type: z.string(),
       is_deleted: z.number(),
-      answers: z
-        .record(
-          z.string(),
-          z.array(
-            z.object({ label: z.string().optional(), content: z.string(), is_deleted: z.number() }),
-          ),
-        )
-        .optional(),
+      answers: z.array(
+        z.object({ label: z.string().optional(), content: z.string(), is_deleted: z.number() }),
+      ),
       correct_answer: z.number().optional(),
     }),
   ),
