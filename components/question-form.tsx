@@ -1,6 +1,6 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { RotateCcwIcon, TrashIcon } from "lucide-react";
-import { useFieldArray, useForm, useFormContext } from "react-hook-form";
+import { useFieldArray, useFormContext } from "react-hook-form";
 import {
   Form,
   FormControl,
@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
 import { QuestionFormSchema, QuestionFormType } from "@/app/page";
-import { Checkbox } from "./ui/checkbox";
 
 const QuestionType = {
   ["text"]: { value: "0", label: "Text", index: 0 },
@@ -32,12 +31,14 @@ export function QuestionForm(props: QuestionFormProps) {
     name: "question",
   });
   const { fields, append, update } = fieldArray;
+  const { mode } = useQuestionFormContext();
 
   // 2. Define a submit handler.
   function onSubmit(values: QuestionFormSchema) {
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
   }
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -48,7 +49,10 @@ export function QuestionForm(props: QuestionFormProps) {
                 <React.Fragment key={fieldData.id}>
                   <div
                     key={fieldData.id}
-                    className={"border-dashed border p-4 flex flex-col gap-3"}
+                    className={cn(
+                      "border-dashed border p-4 flex flex-col gap-3",
+                      mode === "normal" && fieldData.is_deleted === 1 && "hidden",
+                    )}
                   >
                     <QuestionName index={index} />
                     <Answer index={index} />
@@ -93,8 +97,14 @@ export function QuestionName(props: QuestionNameProps) {
         return (
           <FormItem>
             <div className={"flex gap-2 items-center"}>
-              <FormLabel className={cn(isQuestionDeleted && "line-through italic text-white/60")}>
-                Question {index + 1}
+              <FormLabel
+                className={cn(
+                  isQuestionDeleted && "line-through italic text-white/60",
+                  "font-semibold text-base",
+                )}
+                asChild
+              >
+                <h3>Question {index + 1}</h3>
               </FormLabel>
               <RestoreQuestionButton index={index} />
             </div>
@@ -123,45 +133,55 @@ export function Answer(props: AnswerProps) {
   const isQuestionDeleted = form.getValues().question[index].is_deleted === 1;
 
   return (
-    <FormItem>
-      <FormLabel className={cn(isQuestionDeleted && "line-through text-white/60 italic")}>
-        Answer
+    <FormItem className={"space-y-2"}>
+      <FormLabel
+        className={cn(
+          isQuestionDeleted && "line-through text-white/60 italic",
+          "text-base font-semibold",
+        )}
+        asChild
+      >
+        <h3>Answer</h3>
       </FormLabel>
       <FormField
         control={form.control}
         name={`question.${index}.type`}
         render={({ field }) => {
           return (
-            <RadioGroup defaultValue={field.value} onValueChange={field.onChange}>
-              <div className={"grid grid-cols-3 w-max mb-1"}>
-                <QuestionTypeRadio
-                  label={QuestionType.text.label}
-                  type={QuestionType.text.value}
-                  isDeleted={isQuestionDeleted}
-                />
-                <QuestionTypeRadio
-                  label={QuestionType.radio.label}
-                  type={QuestionType.radio.value}
-                  isDeleted={isQuestionDeleted}
-                />
-                <QuestionTypeRadio
-                  label={QuestionType.checkbox.label}
-                  type={QuestionType.checkbox.value}
-                  isDeleted={isQuestionDeleted}
-                />
-              </div>
+            <div>
               <FormItem>
+                <RadioGroup defaultValue={field.value} onValueChange={field.onChange}>
+                  <div className={"grid grid-cols-3 w-max mb-1"}>
+                    <QuestionTypeRadio
+                      label={QuestionType.text.label}
+                      type={QuestionType.text.value}
+                      isDeleted={isQuestionDeleted}
+                    />
+                    <QuestionTypeRadio
+                      label={QuestionType.radio.label}
+                      type={QuestionType.radio.value}
+                      isDeleted={isQuestionDeleted}
+                    />
+                    <QuestionTypeRadio
+                      label={QuestionType.checkbox.label}
+                      type={QuestionType.checkbox.value}
+                      isDeleted={isQuestionDeleted}
+                    />
+                  </div>
+                </RadioGroup>
                 {field.value === QuestionType.text.value ?
                   <TextAnswer form={form} questionIndex={index} />
                 : null}
-                {field.value === QuestionType.radio.value ?
-                  <RadioAnswer form={form} questionIndex={index} />
-                : null}
-                {field.value === QuestionType.checkbox.value ?
-                  <CheckboxAnswer />
-                : null}
               </FormItem>
-            </RadioGroup>
+              <FormItem>
+                {/*   {field.value === QuestionType.radio.value ? */}
+                {/*     <RadioAnswer form={form} questionIndex={index} /> */}
+                {/*   : null} */}
+                {/*   {field.value === QuestionType.checkbox.value ? */}
+                {/*     <CheckboxAnswer /> */}
+                {/*   : null} */}
+              </FormItem>
+            </div>
           );
         }}
       />
@@ -201,33 +221,39 @@ function TextAnswer(props: TextAnswerProps) {
 
   return (
     <FieldArrayProvider fieldArray={fieldArray}>
-      <FormField
-        control={form.control}
-        name={`question.${questionIndex}.min_answer`}
-        render={({ field }) => {
-          return (
-            <FormItem className={"flex items-center gap-2 space-y-0"}>
-              <FormLabel>Min answer</FormLabel>
-              <FormControl>
-                <Input
-                  type={"number"}
-                  min={0}
-                  className={"w-20"}
-                  value={field.value}
-                  onInput={(event) => {
-                    event.preventDefault();
-                    console.log(event.currentTarget.valueAsNumber);
-                    if (isNaN(event.currentTarget.valueAsNumber)) {
-                      // @ts-ignore
-                      event.currentTarget.value = field.value;
-                    }
-                  }}
-                />
-              </FormControl>
-            </FormItem>
-          );
-        }}
-      />
+      <div className={"border border-dashed flex items-stretch flex-grow h-max"}>
+        <FormField
+          control={form.control}
+          name={`question.${questionIndex}.min_answer`}
+          render={({ field }) => {
+            return (
+              <FormItem className={"p-2"}>
+                <FormLabel className={cn(questionDeleted && "italic line-through text-white/60")}>
+                  Min answer
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type={"number"}
+                    min={0}
+                    className={"w-20"}
+                    value={field.value}
+                    onInput={(event) => {
+                      event.preventDefault();
+                      console.log(event.currentTarget.valueAsNumber);
+                      if (isNaN(event.currentTarget.valueAsNumber)) {
+                        // @ts-ignore
+                        event.currentTarget.value = field.value;
+                      }
+                    }}
+                    disabled={questionDeleted}
+                  />
+                </FormControl>
+              </FormItem>
+            );
+          }}
+        />
+        <div className={"border-l border-dashed"}></div>
+      </div>
       <div>
         {fields.map((f, index) => {
           const isDeleted = f.is_deleted === 1;
@@ -254,10 +280,12 @@ function TextAnswer(props: TextAnswerProps) {
         })}
         <Button
           size={"sm"}
+          variant={"ghost"}
           onClick={() => {
             append({ content: "", is_deleted: 0 });
           }}
           disabled={questionDeleted}
+          className={"border"}
         >
           Add Answer
         </Button>
@@ -477,4 +505,31 @@ function AnswerLabel(props: AnswerLabelProps) {
       }}
     />
   );
+}
+
+export function useQuestionForm() {
+  const [mode, setMode] = useState<"normal" | "restore">("normal");
+  function changeMode(mode: "normal" | "restore") {
+    setMode(mode);
+  }
+
+  return { mode, changeMode };
+}
+
+const questionFormContext = createContext<ReturnType<typeof useQuestionForm>>({
+  mode: "normal",
+  changeMode: () => {},
+});
+export function QuestionFormProvider(
+  props: React.PropsWithChildren<{ questionForm: ReturnType<typeof useQuestionForm> }>,
+) {
+  const { children, questionForm } = props;
+
+  return (
+    <questionFormContext.Provider value={questionForm}>{children}</questionFormContext.Provider>
+  );
+}
+
+function useQuestionFormContext() {
+  return useContext(questionFormContext);
 }

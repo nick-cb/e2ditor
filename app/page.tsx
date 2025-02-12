@@ -3,10 +3,13 @@
 import React from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { CirclePlusIcon } from "lucide-react";
-import { QuestionForm } from "@/components/question-form";
+import { QuestionForm, QuestionFormProvider, useQuestionForm } from "@/components/question-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const formSchema = z.object({
   question: z.array(
@@ -18,7 +21,7 @@ const formSchema = z.object({
         z.object({ label: z.string().optional(), content: z.string(), is_deleted: z.number() }),
       ),
       correct_answer: z.number().optional(),
-      min_answer: z.number().optional()
+      min_answer: z.number().optional(),
     }),
   ),
 });
@@ -32,6 +35,8 @@ export default function Home() {
       question: [],
     },
   });
+  const questionForm = useQuestionForm();
+
   return (
     <div className={"grid grid-cols-8 gap-2 p-3"}>
       <Sheet>
@@ -43,20 +48,54 @@ export default function Home() {
           <CirclePlusIcon />
           <div>Add New</div>
         </SheetTrigger>
-        <SheetContent className={"!max-w-none w-1/2"}>
-          <SheetHeader className={"my-4"}>
-            <SheetTitle>
-              <div
-                contentEditable
-                onChange={() => {}}
-                suppressContentEditableWarning
-                className={"outline-none"}
+        <SheetContent className={"!max-w-none w-1/2 p-0 overflow-y-scroll"}>
+          <div className={"border-b min-h-10 p-4"}>
+            <div
+              className={
+                "items-center justify-center rounded-md bg-muted p-1 text-muted-foreground grid w-max grid-cols-2 gap-1"
+              }
+            >
+              <Button
+                size="sm"
+                variant={"outline"}
+                className={cn(
+                  "hover:bg-background w-20",
+                  questionForm.mode === "normal" ? "bg-background" : "bg-muted",
+                )}
+                onClick={() => questionForm.changeMode('normal')}
               >
-                Untile Test
-              </div>
-            </SheetTitle>
-          </SheetHeader>
-          <QuestionForm form={form} />
+                Normal
+              </Button>
+              <Button
+                size="sm"
+                variant={"outline"}
+                className={cn(
+                  "hover:bg-background w-20",
+                  questionForm.mode === "restore" ? "bg-background" : "bg-muted",
+                )}
+                onClick={() => questionForm.changeMode('restore')}
+              >
+                Restore
+              </Button>
+            </div>
+          </div>
+          <div className={'p-4'}>
+            <SheetHeader className={"my-4"}>
+              <SheetTitle>
+                <div
+                  contentEditable
+                  onChange={() => {}}
+                  suppressContentEditableWarning
+                  className={"outline-none"}
+                >
+                  Untile Test
+                </div>
+              </SheetTitle>
+            </SheetHeader>
+            <QuestionFormProvider questionForm={questionForm}>
+              <QuestionForm form={form} />
+            </QuestionFormProvider>
+          </div>
         </SheetContent>
       </Sheet>
     </div>
