@@ -1,6 +1,6 @@
 import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const topic = sqliteTable("users_table", {
+export const topics = sqliteTable("topics", {
   id: int().primaryKey({ autoIncrement: true }),
   name: text().notNull(),
   created_at: int({ mode: "timestamp_ms" }),
@@ -9,9 +9,10 @@ export const topic = sqliteTable("users_table", {
 
 export const tests = sqliteTable("tests", {
   id: int().primaryKey({ autoIncrement: true }),
-  topicId: int("topic_id")
-    .notNull()
-    .references(() => topic.id),
+  name: text(),
+  // topicId: int("topic_id")
+  //   .notNull()
+  //   .references(() => topics.id),
   created_at: int({ mode: "timestamp_ms" }),
   finished_at: int({ mode: "timestamp_ms" }),
   point: int(),
@@ -31,11 +32,14 @@ export const testDetails = sqliteTable("test_details", {
 
 export const questions = sqliteTable("questions", {
   id: int().primaryKey({ autoIncrement: true }),
-  topicId: int("topic_id")
-    .notNull()
-    .references(() => topic.id),
+  // topicId: int("topic_id")
+  //   .notNull()
+  //   .references(() => topics.id),
+  testId: int("test_id").notNull().references(() => tests.id),
   type: int().notNull().default(0),
-  question: text().notNull(),
+  title: text(),
+  isDeleted: int("is_deleted").default(0),
+  minAnswer: int("min_answer"),
 });
 
 export const answerKeys = sqliteTable("answer_keys", {
@@ -47,8 +51,8 @@ export const answerKeys = sqliteTable("answer_keys", {
   group: int()
     .notNull()
     .references(() => answerGroup.id),
-  label: text().notNull(),
-  text: text().notNull(),
+  label: text(),
+  content: text().notNull(),
   isCorrect: int("is_correct"),
 });
 
