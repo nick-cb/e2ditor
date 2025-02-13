@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Button } from "@/components/ui/button";
-import { QuestionFormSchema, QuestionFormType } from "@/app/page";
+import { QuestionFormSchema, QuestionFormType } from "./QuestionSheet";
 
-const QuestionType = {
+export const QuestionType = {
   ["text"]: { value: "0", label: "Text", index: 0 },
   ["radio"]: { value: "1", label: "Radio", index: 1 },
   ["checkbox"]: { value: "2", label: "Checkbox", index: 2 },
@@ -352,7 +352,7 @@ function RadioAnswer(props: RadioAnswerProps) {
         <Button
           size={"sm"}
           onClick={() => {
-            append({ label: undefined, content: "", isDeleted: 0,isCorerct:0 });
+            append({ label: undefined, content: "", isDeleted: 0, isCorerct: 0 });
           }}
           disabled={questionDeleted}
         >

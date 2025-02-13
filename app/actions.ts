@@ -1,8 +1,8 @@
 "use server";
 
+import { QuestionFormSchema } from "@/components/QuestionSheet";
 import { db } from "@/drizzle";
 import { answerGroup, answerKeys, questions, tests, topics } from "@/drizzle/schema";
-import { QuestionFormSchema } from "./page";
 import { eq, inArray, sql } from "drizzle-orm";
 
 export async function saveTest(values: QuestionFormSchema) {
@@ -59,7 +59,38 @@ export async function saveTest(values: QuestionFormSchema) {
 }
 
 export async function getTestById(id: number) {
-  db.select().from(tests).leftJoin(questions, eq(tests.id, questions.id)).where(eq(tests.id, id));
+  if (!id) return null;
+  const ts = await db
+    .select({
+      id: tests.id,
+      name: tests.name,
+      created_at: tests.created_at,
+      finished_at: tests.finished_at,
+      point: tests.point,
+    })
+    .from(tests)
+    .where(eq(tests.id, id));
+  const test = ts[0];
+  const testQuestions = await db.select().from(questions).where(eq(questions.id, test.id));
+  const answers = await db
+    .select()
+    .from(answerKeys)
+    .where(
+      inArray(
+        answerKeys.questionId,
+        testQuestions.map((q) => q.id),
+      ),
+    );
+
+  return {
+    ...test,
+    questions: testQuestions.map((q) => {
+      return {
+        ...q,
+        answers: answers.filter((a) => a.questionId === q.id),
+      };
+    }),
+  };
 }
 
 export async function getAllTest() {

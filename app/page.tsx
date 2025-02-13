@@ -2,12 +2,14 @@ import { QuestionSheet } from "@/components/QuestionSheet";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import { CirclePlusIcon } from "lucide-react";
 import React from "react";
-import { getAllTest } from "./actions";
+import { getAllTest, getTestById } from "./actions";
 import Link from "next/link";
+import { AnswerSheet } from "@/components/answer-sheet";
 
-export default async function Home() {
+export default async function Home({ searchParams }: any) {
   const tests = await getAllTest();
-  console.log(tests);
+  const test = await getTestById(searchParams["testId"]);
+  console.log({ test });
   return (
     <div className={"grid grid-cols-8 gap-2 p-3"}>
       <Sheet>
@@ -16,16 +18,19 @@ export default async function Home() {
           <div>Add New</div>
         </SheetTrigger>
         <QuestionSheet />
-        {tests.map((test) => {
-          return (
-            <Link href={`/?${test.id}`}>
-              <div className="aspect-square border border-white/60 flex justify-center items-center gap-2">
-                {test.name}
-              </div>
-            </Link>
-          );
-        })}
       </Sheet>
+      {tests.map((test) => {
+        return (
+          <Link key={test.id} href={`/?testId=${test.id}`}>
+            <div className="aspect-square border border-white/60 flex justify-center items-center gap-2">
+              {test.name}
+            </div>
+          </Link>
+        );
+      })}
+      {test ?
+        <AnswerSheet test={test} />
+      : null}
     </div>
   );
 }
