@@ -9,7 +9,7 @@ import { AnswerSheet } from "@/components/answer-sheet";
 export default async function Home({ searchParams }: any) {
   const tests = await getAllTest();
   const test = await getTestById(searchParams["testId"]);
-  console.log({ test });
+
   return (
     <div className={"grid grid-cols-8 gap-2 p-3"}>
       <Sheet>
