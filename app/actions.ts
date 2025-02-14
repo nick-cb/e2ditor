@@ -1,11 +1,12 @@
 "use server";
 
+import { AnswerFormSchema } from "@/components/answer-sheet";
 import { QuestionFormSchema } from "@/components/QuestionSheet";
 import { db } from "@/drizzle";
-import { answerGroup, answerKeys, questions, tests, topics } from "@/drizzle/schema";
+import { answerGroup, answerKeys, questions, testDetails, tests, topics } from "@/drizzle/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 
-export async function saveTest(values: QuestionFormSchema) {
+export async function createNewTest(values: QuestionFormSchema) {
   let id = values.id;
   if (!id) {
     const insertedTests = await db.insert(tests).values({ name: values.testName }).returning();
@@ -95,4 +96,18 @@ export async function getTestById(id: number) {
 
 export async function getAllTest() {
   return db.select().from(tests);
+}
+
+export async function saveTestById(values: AnswerFormSchema) {
+  const id = values.id;
+  for (const question of values.questions) {
+    for (const answer of question.answers) {
+      await db.update(testDetails).set({
+        testId: values.id,
+        questionId: question.id,
+        answerId: answer.id,
+        answerText: answer.content,
+      });
+    }
+  }
 }

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { ControllerRenderProps, useForm } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { saveTest } from "../app/actions";
+import { createNewTest } from "../app/actions";
 import { Form, FormField } from "@/components/ui/form";
 
 const formSchema = z.object({
@@ -49,7 +49,7 @@ export function QuestionSheet() {
   const questionForm = useQuestionForm();
   function onSubmit(values: QuestionFormSchema) {
     startTransition(async () => {
-      const newTest = await saveTest(values);
+      const newTest = await createNewTest(values);
     });
   }
   return (

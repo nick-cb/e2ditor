@@ -28,6 +28,7 @@ const formSchema = z.object({
     }),
   ),
 });
+export type AnswerFormSchema = z.infer<typeof formSchema>;
 
 type Test = InferSelectModel<typeof tests> & {
   questions: (InferSelectModel<typeof questions> & {
@@ -77,7 +78,9 @@ export function AnswerSheet(
     >
       <SheetContent className={"!max-w-none w-1/2 overflow-y-scroll p-0"}>
         <div className={"border-b min-h-10 p-4 flex items-center justify-between"}>
-          <Button variant={"outline"} type={"submit"} className={"mr-8"}>
+          <Button variant={"outline"} type={"submit"} onClick={() => {
+
+          }} className={"mr-8"}>
             Save
           </Button>
         </div>
