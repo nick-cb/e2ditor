@@ -91,22 +91,25 @@ export function Block({
           if (key.toLowerCase() === "backspace") {
             const range = document.getSelection()?.getRangeAt(0);
             if (range) {
-              const node =
-                range.commonAncestorContainer.nodeType !== 1 ?
-                  range.commonAncestorContainer.parentElement
-                : range.commonAncestorContainer;
-              const caretBlock = editor.getBlockFromNode(node as HTMLElement);
-              if (
-                caretBlock?.el?.textContent?.length === 1 &&
-                caretBlock.type === "inline-option-1"
-              ) {
+              const caretBlock = editor.getBlockFromNode(range.commonAncestorContainer);
+              if (!caretBlock) return;
+              const isEmpty = caretBlock.el?.textContent?.length === 0;
+              if (isEmpty && caretBlock.type === "inline-option-1") {
                 event.preventDefault();
-                editor.deleteBlockFromParent(
-                  caretBlock.parent!.parent!,
-                  caretBlock.parent!,
-                );
+                editor.deleteBlockFromParent(caretBlock.parent!.parent!, caretBlock.parent!);
+                // editor.updateCaretPosition(block.id);
               }
-              editor.updateCaretPosition(block.id);
+              if (isEmpty && caretBlock.type === "inline-option-2") {
+                event.preventDefault();
+                console.log({ caretBlock })
+                // document
+                //   .getSelection()
+                //   ?.collapse(
+                //     caretBlock.parent?.children[0]!.selection?.anchorNode,
+                //     caretBlock.parent?.children[0]!.selection?.anchorOffset,
+                //   );
+                // editor.deleteBlockFromParent(caretBlock.parent!, caretBlock);
+              }
             }
             const anchorOffset = block.selection!.anchorOffset;
             if (anchorOffset > 0) return;
@@ -174,7 +177,7 @@ export function Block({
                     key={child.children[0].id}
                     contentEditable
                     suppressContentEditableWarning
-                    className={"px-1 min-h-6"}
+                    className={"px-1 min-h-6 bg-red-200"}
                   />
                 </div>
                 <div
@@ -182,7 +185,7 @@ export function Block({
                   key={child.children[1].id}
                   contentEditable
                   suppressContentEditableWarning
-                  className={"px-1 min-h-6"}
+                  className={"px-1 min-h-6 bg-green-200"}
                 />
               </React.Fragment>
             );
@@ -360,12 +363,21 @@ function useEditor() {
     return inlineOptionBlock;
   }
 
-  function getBlockFromNode(node: HTMLElement) {
-    return blockMapRef.current.get(node);
+  function getBlockFromNode(node: HTMLElement | Node) {
+    if (node instanceof HTMLElement) {
+      return blockMapRef.current.get(node);
+    }
+
+    if (node.nodeType !== 1 && node.parentElement) {
+      node = node.parentElement;
+      return blockMapRef.current.get(node as HTMLElement);
+    }
+
+    return null;
   }
 
   function deleteBlockFromParent(parent: TBlock, block: TBlock) {
-    console.log({parent, block});
+    console.log({ parent, block });
     const index = parent.children.findIndex((c) => c === block);
     if (index === -1) return;
     parent.children.splice(index, 1);
