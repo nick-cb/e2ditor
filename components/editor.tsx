@@ -83,7 +83,7 @@ export function Block({
                 blockElement.textContent = part1;
                 newElement.textContent = part2;
                 document.getSelection()?.collapse(blockElement, anchorOffset);
-                editor.updateCaretPosition(newBlock.id);
+                editor.updateCaretPosition(newBlock);
               }
             }
             return;
@@ -102,6 +102,7 @@ export function Block({
               if (isEmpty && caretBlock.type === "inline-option-2") {
                 event.preventDefault();
                 console.log({ caretBlock })
+                // const sibling = caretBlock.parent?.children[0]
                 // document
                 //   .getSelection()
                 //   ?.collapse(
@@ -161,9 +162,9 @@ export function Block({
         onKeyUp={(event) => {
           const key = event.key;
           if (!event.shiftKey && key.toLowerCase() === "enter") return;
-          editor.updateCaretPosition(block.id);
+          editor.updateCaretPosition(block);
         }}
-        onClick={(event) => editor.updateCaretPosition(block.id)}
+        onClick={(event) => editor.updateCaretPosition(block)}
         className={"w-full flex items-center"}
       >
         {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
@@ -323,9 +324,7 @@ function useEditor() {
     setCommandPromptState((prev) => ({ ...prev, open: false }));
   }
 
-  function updateCaretPosition(id: string) {
-    const block = blocksRef.current.find((b) => b.id === id);
-    if (!block) return;
+  function updateCaretPosition(block: TBlock) {
     block.el?.focus();
     const selection = document.getSelection();
     if (!selection) return;
