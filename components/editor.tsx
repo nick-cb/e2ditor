@@ -58,22 +58,32 @@ export function Block({
         suppressContentEditableWarning
         onKeyDown={(event) => {
           const key = event.key;
+          console.log({ key });
+          if (event.key.toLowerCase() === "tab") {
+            const selection = document.getSelection()!;
+            if (selection.focusNode?.parentElement?.id === "inline-option-1") {
+              document.getSelection()?.collapse(document.getElementById("inline-option-2"), 0);
+            }
+          }
           if (!event.shiftKey && key.toLowerCase() === "enter") {
             if (editor.commandPromptState.open) {
               event.preventDefault();
-              const span = document.createElement("span");
-              span.style.background = "red";
-              span.style.width = "50px";
-              span.style.minHeight = "16px";
-              span.style.display = "inline-block";
-              const span2 = document.createElement("span");
-              span2.style.background = "blue";
-              span2.style.width = "50px";
-              span2.style.minHeight = "16px";
-              span2.style.display = "inline-block";
-              event.currentTarget.appendChild(span);
-              event.currentTarget.append("/");
-              event.currentTarget.append(span2);
+              // const span = document.createElement("span");
+              // span.id = "inline-option-1";
+              // span.style.background = "red";
+              // span.style.minWidth = "50px";
+              // span.style.minHeight = "16px";
+              // span.style.display = "inline-block";
+              // const span2 = document.createElement("span");
+              // span2.id = "inline-option-2";
+              // span2.style.background = "blue";
+              // span2.style.minWidth = "50px";
+              // span2.style.minHeight = "16px";
+              // span2.style.display = "inline-block";
+              // event.currentTarget.appendChild(span);
+              // event.currentTarget.append("/");
+              // event.currentTarget.append(span2);
+              editor.insertInlineOption(block.id);
               editor.closeCommandPrompt();
               return;
             }
@@ -94,7 +104,7 @@ export function Block({
                 newElement.textContent = part2;
                 document.getSelection()?.collapse(blockElement, anchorOffset);
                 editor.updateCaretPosition(newBlock.id);
-                document.getSelection()?.collapse(newBlock.selection?.anchorNode!, part2.length);
+                // document.getSelection()?.collapse(newBlock.selection?.anchorNode!, part2.length);
               }
             }
             return;
@@ -165,7 +175,19 @@ export function Block({
         }}
         onClick={(event) => editor.updateCaretPosition(block.id)}
         className={"w-full"}
-      />
+      >
+        {block.children.map((child) => {
+          if (child.type === "inline-option") {
+            return (
+              <React.Fragment key={child.id}>
+                <span className={"px-1 min-h-4 inline-block bg-red-200"}></span>/
+                <span className={"px-1 min-h-4 inline-block bg-blue-200"}></span>
+              </React.Fragment>
+            );
+          }
+          return null;
+        })}
+      </div>
     </div>
   );
 }
@@ -174,16 +196,17 @@ export function EditorTitle() {
   return <div>Untitled Test</div>;
 }
 
-type Block = {
+type TBlock = {
   id: string;
   el?: HTMLDivElement;
+  children: any[];
   selection: { anchorNode: Node | null; anchorOffset: number } | null;
 };
 function useEditor() {
-  const blocksRef = useRef<Block[]>([]);
+  const blocksRef = useRef<TBlock[]>([]);
   const [_, setRender] = useState(false);
   const [commandPromptState, setCommandPromptState] = useState<{
-    block: Block | null;
+    block: TBlock | null;
     open: boolean;
     top: number;
     left: number;
@@ -206,7 +229,7 @@ function useEditor() {
 
   // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
   function addBlock() {
-    const newBlock = { id: crypto.randomUUID(), selection: null };
+    const newBlock = { id: crypto.randomUUID(), selection: null, children: [] };
     const index = blocksRef.current.push(newBlock);
     flushSync(() => setRender((prev) => !prev));
     // updateCaretPosition(newBlock.id);
@@ -215,7 +238,7 @@ function useEditor() {
   }
 
   function addBlockAfter(block: any) {
-    const newBlock = { id: crypto.randomUUID(), selection: null };
+    const newBlock = { id: crypto.randomUUID(), selection: null, children: [] };
     const index = blocksRef.current.findIndex((b) => b.id === block.id) + 1;
     blocksRef.current.splice(index, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
@@ -278,6 +301,14 @@ function useEditor() {
     console.log(selection, selection.anchorOffset, selection.rangeCount);
   }
 
+  function insertInlineOption(id: string) {
+    const block = blocksRef.current.find((b) => b.id === id);
+    if (!block) return;
+    block.children.push({ id: crypto.randomUUID(), type: "inline-option" });
+    flushSync(() => setRender((prev) => !prev));
+    return block;
+  }
+
   return {
     blocks: blocksRef.current,
     commandPromptState,
@@ -289,6 +320,7 @@ function useEditor() {
     showCommandPrompt,
     updateCaretPosition,
     closeCommandPrompt,
+    insertInlineOption,
   };
 }
 
