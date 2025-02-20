@@ -83,7 +83,7 @@ export function Block({
                 blockElement.textContent = part1;
                 newElement.textContent = part2;
                 document.getSelection()?.collapse(blockElement, anchorOffset);
-                editor.updateCaretPosition(newBlock);
+                // editor.updateCaretPosition(newBlock);
               }
             }
             return;
@@ -101,15 +101,11 @@ export function Block({
               }
               if (isEmpty && caretBlock.type === "inline-option-2") {
                 event.preventDefault();
-                console.log({ caretBlock })
-                // const sibling = caretBlock.parent?.children[0]
-                // document
-                //   .getSelection()
-                //   ?.collapse(
-                //     caretBlock.parent?.children[0]!.selection?.anchorNode,
-                //     caretBlock.parent?.children[0]!.selection?.anchorOffset,
-                //   );
-                // editor.deleteBlockFromParent(caretBlock.parent!, caretBlock);
+                console.log({ caretBlock });
+                const sibling = caretBlock.parent?.children[0];
+                document
+                  .getSelection()
+                  ?.collapse(sibling?.selection?.anchorNode, sibling?.selection?.anchorOffset);
               }
             }
             const anchorOffset = block.selection!.anchorOffset;
@@ -162,9 +158,9 @@ export function Block({
         onKeyUp={(event) => {
           const key = event.key;
           if (!event.shiftKey && key.toLowerCase() === "enter") return;
-          editor.updateCaretPosition(block);
+          // editor.updateCaretPosition(block);
         }}
-        onClick={(event) => editor.updateCaretPosition(block)}
+        // onClick={(event) => editor.updateCaretPosition(block)}
         className={"w-full flex items-center"}
       >
         {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
@@ -225,6 +221,32 @@ function useEditor() {
     left: 0,
     top: 0,
   });
+  const [observer] = useState(
+    new MutationObserver((entries) => {
+      const selection = document.getSelection();
+      if (!selection) return;
+      const anchorNode = selection.anchorNode;
+      const anchorOffset = selection.anchorOffset;
+      for (const entry of entries) {
+        if (entry.target instanceof HTMLElement) {
+          const block = blockMapRef.current.get(entry.target);
+          if (!block || !selection) continue;
+          block.selection = { anchorNode: anchorNode, anchorOffset: anchorOffset };
+        } else {
+          const block = blockMapRef.current.get(entry.target.parentElement as HTMLElement);
+          if (!block || !selection) continue;
+          block.selection = {
+            anchorNode: selection.anchorNode,
+            anchorOffset: selection.anchorOffset,
+          };
+        }
+      }
+    }),
+  );
+
+  useEffect(() => {
+    return () => observer.disconnect();
+  }, []);
 
   function focusBlock(id: string, options?: { restoreCaretPosition: boolean }) {
     const block = blocksRef.current.find((b) => b.id === id);
@@ -277,6 +299,8 @@ function useEditor() {
     return (current: HTMLDivElement) => {
       block.el = current;
       if (current) blockMapRef.current.set(current, block);
+      if (current)
+        observer.observe(current, { characterData: true, subtree: true, childList: true });
       return () => {
         if (current) blockMapRef.current.delete(current);
       };
