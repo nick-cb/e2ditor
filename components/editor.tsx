@@ -68,23 +68,9 @@ export function Block({
           if (!event.shiftKey && key.toLowerCase() === "enter") {
             if (editor.commandPromptState.open) {
               event.preventDefault();
-              // const span = document.createElement("span");
-              // span.id = "inline-option-1";
-              // span.style.background = "red";
-              // span.style.minWidth = "50px";
-              // span.style.minHeight = "16px";
-              // span.style.display = "inline-block";
-              // const span2 = document.createElement("span");
-              // span2.id = "inline-option-2";
-              // span2.style.background = "blue";
-              // span2.style.minWidth = "50px";
-              // span2.style.minHeight = "16px";
-              // span2.style.display = "inline-block";
-              // event.currentTarget.appendChild(span);
-              // event.currentTarget.append("/");
-              // event.currentTarget.append(span2);
               editor.insertInlineOption(block.id);
               editor.closeCommandPrompt();
+              console.log(block);
               return;
             }
             event.preventDefault();
@@ -180,8 +166,15 @@ export function Block({
           if (child.type === "inline-option") {
             return (
               <React.Fragment key={child.id}>
-                <span className={"px-1 min-h-4 inline-block bg-red-200"}></span>/
-                <span className={"px-1 min-h-4 inline-block bg-blue-200"}></span>
+                <span
+                  ref={editor.registerChildren(block.id, child.id)}
+                  className={"px-1 min-h-4 inline-block bg-red-200"}
+                ></span>
+                /
+                <span
+                  ref={editor.registerChildren(block.id, child.id)}
+                  className={"px-1 min-h-4 inline-block bg-blue-200"}
+                ></span>
               </React.Fragment>
             );
           }
@@ -232,8 +225,6 @@ function useEditor() {
     const newBlock = { id: crypto.randomUUID(), selection: null, children: [] };
     const index = blocksRef.current.push(newBlock);
     flushSync(() => setRender((prev) => !prev));
-    // updateCaretPosition(newBlock.id);
-    // console.log(index, blocksRef.current[index - 1]);
     return blocksRef.current[index - 1];
   }
 
@@ -242,7 +233,6 @@ function useEditor() {
     const index = blocksRef.current.findIndex((b) => b.id === block.id) + 1;
     blocksRef.current.splice(index, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
-    // updateCaretPosition(newBlock.id);
     return blocksRef.current[index];
   }
 
@@ -257,6 +247,16 @@ function useEditor() {
       const block = blocksRef.current.find((b) => b.id === id);
       if (!block) return;
       block.el = current;
+    };
+  }, []);
+
+  const registerChildren = useCallback((id: string, childId: string) => {
+    return (current: HTMLElement) => {
+      const block = blocksRef.current.find((b) => b.id === id);
+      if (!block) return;
+      const children = block.children.find((c) => c.id === childId);
+      if (!children.contents) children.contents = new Set();
+      if (children) children.contents.add(current);
     };
   }, []);
 
@@ -321,6 +321,7 @@ function useEditor() {
     updateCaretPosition,
     closeCommandPrompt,
     insertInlineOption,
+    registerChildren,
   };
 }
 
