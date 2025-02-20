@@ -70,3 +70,8 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+.inline-option::after {
+  content: '/';
+  pointer-events: none;
+}

@@ -47,7 +47,8 @@ export function Block({
   editor: ReturnType<typeof useEditor>;
   block: ReturnType<typeof useEditor>["blocks"][number];
 }) {
-  const ref = useCallback(editor.registerBlock(block.id), []);
+  const ref = useCallback(editor.registerBlock(block), []);
+
   return (
     <div className={"flex gap-2"}>
       <div>•</div>
@@ -58,19 +59,12 @@ export function Block({
         suppressContentEditableWarning
         onKeyDown={(event) => {
           const key = event.key;
-          console.log({ key });
-          if (event.key.toLowerCase() === "tab") {
-            const selection = document.getSelection()!;
-            if (selection.focusNode?.parentElement?.id === "inline-option-1") {
-              document.getSelection()?.collapse(document.getElementById("inline-option-2"), 0);
-            }
-          }
           if (!event.shiftKey && key.toLowerCase() === "enter") {
             if (editor.commandPromptState.open) {
               event.preventDefault();
-              editor.insertInlineOption(block.id);
+              const inlineOptionBlock = editor.insertInlineOption(block.id);
               editor.closeCommandPrompt();
-              console.log(block);
+              document.getSelection()?.collapse(inlineOptionBlock?.children[0].el!, 0);
               return;
             }
             event.preventDefault();
@@ -90,33 +84,40 @@ export function Block({
                 newElement.textContent = part2;
                 document.getSelection()?.collapse(blockElement, anchorOffset);
                 editor.updateCaretPosition(newBlock.id);
-                // document.getSelection()?.collapse(newBlock.selection?.anchorNode!, part2.length);
               }
             }
             return;
           }
           if (key.toLowerCase() === "backspace") {
+            const range = document.getSelection()?.getRangeAt(0);
+            if (range) {
+              const node =
+                range.commonAncestorContainer.nodeType !== 1 ?
+                  range.commonAncestorContainer.parentElement
+                : range.commonAncestorContainer;
+              const caretBlock = editor.getBlockFromNode(node as HTMLElement);
+              if (
+                caretBlock?.el?.textContent?.length === 1 &&
+                caretBlock.type === "inline-option-1"
+              ) {
+                event.preventDefault();
+                editor.deleteBlockFromParent(
+                  caretBlock.parent!.parent!,
+                  caretBlock.parent!,
+                );
+              }
+              editor.updateCaretPosition(block.id);
+            }
             const anchorOffset = block.selection!.anchorOffset;
-            console.log({ anchorOffset });
             if (anchorOffset > 0) return;
 
             const blockIndex = editor.blocks.findIndex((b) => b.id === block.id);
             const previousBlock = editor.blocks[blockIndex - 1];
             if (previousBlock) {
               event.preventDefault();
-              editor.deleteBlock(block.id);
+              editor.deleteBlock(block);
               editor.focusBlock(previousBlock.id, { restoreCaretPosition: true });
               return;
-              // console.log(
-              //   previousBlock.selection!.anchorNode,
-              //   previousBlock.el!.textContent?.length ?? 0,
-              // );
-              // document
-              //   .getSelection()
-              //   ?.collapse(
-              //     previousBlock.selection!.anchorNode,
-              //     previousBlock.el!.textContent?.length ?? 0,
-              //   );
             }
           }
           if (key === "/") {
@@ -160,21 +161,29 @@ export function Block({
           editor.updateCaretPosition(block.id);
         }}
         onClick={(event) => editor.updateCaretPosition(block.id)}
-        className={"w-full"}
+        className={"w-full flex items-center"}
       >
+        {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
         {block.children.map((child) => {
           if (child.type === "inline-option") {
             return (
               <React.Fragment key={child.id}>
-                <span
-                  ref={editor.registerChildren(block.id, child.id)}
-                  className={"px-1 min-h-4 inline-block bg-red-200"}
-                ></span>
-                /
-                <span
-                  ref={editor.registerChildren(block.id, child.id)}
-                  className={"px-1 min-h-4 inline-block bg-blue-200"}
-                ></span>
+                <div className={"inline-option flex items-center"}>
+                  <div
+                    ref={editor.registerBlock(child.children[0])}
+                    key={child.children[0].id}
+                    contentEditable
+                    suppressContentEditableWarning
+                    className={"px-1 min-h-6"}
+                  />
+                </div>
+                <div
+                  ref={editor.registerBlock(child.children[1])}
+                  key={child.children[1].id}
+                  contentEditable
+                  suppressContentEditableWarning
+                  className={"px-1 min-h-6"}
+                />
               </React.Fragment>
             );
           }
@@ -191,11 +200,14 @@ export function EditorTitle() {
 
 type TBlock = {
   id: string;
+  type: string;
   el?: HTMLDivElement;
-  children: any[];
+  children: TBlock[];
+  parent: TBlock | null;
   selection: { anchorNode: Node | null; anchorOffset: number } | null;
 };
 function useEditor() {
+  const blockMapRef = useRef<Map<HTMLElement, TBlock>>(new Map());
   const blocksRef = useRef<TBlock[]>([]);
   const [_, setRender] = useState(false);
   const [commandPromptState, setCommandPromptState] = useState<{
@@ -222,43 +234,60 @@ function useEditor() {
 
   // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
   function addBlock() {
-    const newBlock = { id: crypto.randomUUID(), selection: null, children: [] };
+    const newBlock = {
+      id: crypto.randomUUID(),
+      type: "block",
+      selection: null,
+      children: [],
+      parent: null,
+    };
     const index = blocksRef.current.push(newBlock);
     flushSync(() => setRender((prev) => !prev));
     return blocksRef.current[index - 1];
   }
 
   function addBlockAfter(block: any) {
-    const newBlock = { id: crypto.randomUUID(), selection: null, children: [] };
+    const newBlock = {
+      id: crypto.randomUUID(),
+      type: "block",
+      selection: null,
+      children: [],
+      parent: null,
+    };
     const index = blocksRef.current.findIndex((b) => b.id === block.id) + 1;
     blocksRef.current.splice(index, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
     return blocksRef.current[index];
   }
 
-  function deleteBlock(id: string) {
-    const blockIdex = blocksRef.current.findIndex((b) => b.id === id);
-    blocksRef.current.splice(blockIdex, 1);
+  function deleteBlock(block: TBlock) {
+    const blockIndex = blocksRef.current.findIndex((b) => b === block);
+    if (blockIndex === -1) {
+      return;
+    }
+    blocksRef.current.splice(blockIndex, 1);
     flushSync(() => setRender((prev) => !prev));
   }
 
-  const registerBlock = useCallback((id: string) => {
+  const registerBlock = useCallback((block: TBlock) => {
     return (current: HTMLDivElement) => {
-      const block = blocksRef.current.find((b) => b.id === id);
-      if (!block) return;
       block.el = current;
+      if (current) blockMapRef.current.set(current, block);
+      return () => {
+        if (current) blockMapRef.current.delete(current);
+      };
     };
   }, []);
 
-  const registerChildren = useCallback((id: string, childId: string) => {
-    return (current: HTMLElement) => {
-      const block = blocksRef.current.find((b) => b.id === id);
-      if (!block) return;
-      const children = block.children.find((c) => c.id === childId);
-      if (!children.contents) children.contents = new Set();
-      if (children) children.contents.add(current);
-    };
-  }, []);
+  // const registerChildren = useCallback((id: string, childId: string) => {
+  //   return (current: HTMLElement) => {
+  //     const block = blocksRef.current.find((b) => b.id === id);
+  //     if (!block) return;
+  //     const children = block.children.find((c) => c.id === childId);
+  //     // if (!children.contents) children.contents = new Set();
+  //     // if (children) children.contents.add(current);
+  //   };
+  // }, []);
 
   function showCommandPrompt(id: string) {
     const block = blocksRef.current.find((b) => b.id === id);
@@ -303,14 +332,49 @@ function useEditor() {
 
   function insertInlineOption(id: string) {
     const block = blocksRef.current.find((b) => b.id === id);
-    if (!block) return;
-    block.children.push({ id: crypto.randomUUID(), type: "inline-option" });
+    if (!block) return null;
+    const inlineOptionBlock: TBlock = {
+      id: crypto.randomUUID(),
+      type: "inline-option",
+      children: [],
+      selection: null,
+      parent: block,
+    };
+    inlineOptionBlock.children.push({
+      id: crypto.randomUUID(),
+      type: "inline-option-1",
+      children: [],
+      selection: null,
+      parent: inlineOptionBlock,
+    });
+    inlineOptionBlock.children.push({
+      id: crypto.randomUUID(),
+      type: "inline-option-2",
+      children: [],
+      selection: null,
+      parent: inlineOptionBlock,
+    });
+    block.children.push(inlineOptionBlock);
     flushSync(() => setRender((prev) => !prev));
-    return block;
+
+    return inlineOptionBlock;
+  }
+
+  function getBlockFromNode(node: HTMLElement) {
+    return blockMapRef.current.get(node);
+  }
+
+  function deleteBlockFromParent(parent: TBlock, block: TBlock) {
+    console.log({parent, block});
+    const index = parent.children.findIndex((c) => c === block);
+    if (index === -1) return;
+    parent.children.splice(index, 1);
+    flushSync(() => setRender((prev) => !prev));
   }
 
   return {
     blocks: blocksRef.current,
+    blockMap: blockMapRef.current,
     commandPromptState,
     focusBlock,
     addBlock,
@@ -321,7 +385,9 @@ function useEditor() {
     updateCaretPosition,
     closeCommandPrompt,
     insertInlineOption,
-    registerChildren,
+    getBlockFromNode,
+    deleteBlockFromParent,
+    // registerChildren,
   };
 }
 
