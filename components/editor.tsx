@@ -24,6 +24,7 @@ export function Editor() {
           if (!lastBlock || lastBlock.el?.textContent) {
             const newBlock = editor.addBlock();
             editor.focusBlock(newBlock);
+            editor.updateCaretPosition(newBlock);
           }
         }}
         className={"min-h-full border cursor-text"}
@@ -64,7 +65,6 @@ export function Block({
               const selection = document.getSelection();
               assert(!!selection, "selection is null");
               const rangeCount = selection.rangeCount;
-              console.log({ rangeCount });
               editor.closeCommandPrompt();
               // const anchorOffset = selection.anchorOffset;
               const inlineOption1 = inlineOption.children[0];
@@ -94,12 +94,12 @@ export function Block({
             const index = editor.blocks.findIndex((b) => b.id === block.id);
             const nextBlock = editor.blocks[index + 1];
             if (nextBlock) {
-              const caretPos = editor.gelBlockCaretPosition(block);
+              const caretPos = editor.getBlockCaretPosition(block);
               // const selection = document.getSelection();
               // assert(!!selection, "selection is null");
               // const anchorOffset = selection?.anchorOffset;
               // console.log({ anchorOffset });
-              // editor.focusBlock(nextBlock);
+              editor.focusBlock(nextBlock);
               editor.changeCaretPosition(nextBlock, caretPos);
             }
           }
@@ -111,6 +111,8 @@ export function Block({
             editor.openCommandPrompt(block, span);
           }
         }}
+        onKeyUp={() => editor.updateCaretPosition(block)}
+        onClick={() => editor.updateCaretPosition(block)}
         className={"w-full flex items-center"}
       >
         {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
@@ -156,6 +158,7 @@ type TBlock = {
   type: string;
   el?: HTMLDivElement;
   children: TBlock[];
+  caretPos: number;
   // parent: TBlock | null;
 };
 function useEditor() {
@@ -199,19 +202,26 @@ function useEditor() {
 
   // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
   function addBlock() {
-    const newBlock: TBlock = { id: crypto.randomUUID(), type: "block", children: [] };
+    const newBlock: TBlock = { id: crypto.randomUUID(), type: "block", children: [], caretPos: 0 };
     blocksRef.current.push(newBlock);
     flushSync(() => setRender((prev) => !prev));
     // observer.observe(newBlock.el!, { childList: true });
+    newBlock.caretPos = getBlockCaretPosition(newBlock);
     return newBlock;
   }
 
   function addBlockAfter(block: TBlock) {
     const index = blocksRef.current.findIndex((b) => b.id === block.id);
-    const newBLock: TBlock = { id: crypto.randomUUID(), type: "block", children: [] };
-    blocksRef.current.splice(index + 1, 0, newBLock);
+    const newBlock: TBlock = {
+      id: crypto.randomUUID(),
+      type: "block",
+      children: [],
+      caretPos: 0,
+    };
+    blocksRef.current.splice(index + 1, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
-    return newBLock;
+    newBlock.caretPos = getBlockCaretPosition(newBlock);
+    return newBlock;
   }
 
   function deleteBlock(block: TBlock) {}
@@ -266,7 +276,23 @@ function useEditor() {
     setCommandPromptState((prev) => ({ ...prev, open: false }));
   }
 
-  function updateCaretPosition(block: TBlock) {}
+  function updateCaretPosition(block: TBlock) {
+    assert(!!block.el, "No dom node associate with this block: " + block.id);
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    const endNode = selection.focusNode;
+    const endOffset = selection.focusOffset;
+    const result = a(block.el, 0);
+    console.log(result, selection);
+    for (const item of result) {
+      if (item[0] instanceof Node) {
+        if (item[0] === endNode) {
+          block.caretPos = item[1] + endOffset;
+          setRender((prev) => !prev);
+        }
+      }
+    }
+  }
 
   function insertInlineOption(block: TBlock) {
     const inlineOption: TInlineOption = {
@@ -274,18 +300,21 @@ function useEditor() {
       type: "inline-option",
       children: [],
       parent: block,
+      caretPos: 0,
     };
     const inlineOption1: TInlineOption = {
       id: crypto.randomUUID(),
       type: "inline-option-1",
       children: [],
       parent: inlineOption,
+      caretPos: 0,
     };
     const inlineOption2: TInlineOption = {
       id: crypto.randomUUID(),
       type: "inline-option-2",
       children: [],
       parent: inlineOption,
+      caretPos: 0,
     };
     inlineOption.children = [inlineOption1, inlineOption2];
 
@@ -300,7 +329,7 @@ function useEditor() {
 
   function deleteBlockFromParent(parent: TBlock, block: TBlock) {}
 
-  function a(node: Node, startOffSet: number) {
+  function a(node: Node, startOffSet: number): any[] {
     let result = [];
     for (const childNode of node.childNodes) {
       if (childNode.nodeType === 3) {
@@ -312,6 +341,10 @@ function useEditor() {
           startOffSet = last[2];
         }
       }
+      startOffSet += 1;
+    }
+    if (!node.childNodes.length) {
+      result.push([node, startOffSet, startOffSet + 1]);
     }
 
     return result;
@@ -338,10 +371,10 @@ function useEditor() {
     if (!lastNode) return;
     const selection = document.getSelection();
     assert(!!selection, "no selection");
-    selection.collapse(lastNode[0], lastNode[0].textContent.length)
+    selection.collapse(lastNode[0], lastNode[0].textContent.length);
   }
 
-  function gelBlockCaretPosition(block: TBlock) {
+  function getBlockCaretPosition(block: TBlock) {
     assert(!!block.el, "No dom node associate with this block: " + block.id);
     const selection = document.getSelection();
     assert(!!selection, "no selection");
@@ -355,6 +388,8 @@ function useEditor() {
         }
       }
     }
+
+    return 0;
   }
 
   function isPointInRange(range: Range, node: Node, position: number) {
@@ -375,7 +410,6 @@ function useEditor() {
   function collapseCaretToNode(node: HTMLElement, position: number) {
     const selection = document.getSelection();
     assert(!!selection, "no selection");
-    console.log(node, position);
     selection.collapse(node, position);
   }
 
@@ -396,7 +430,7 @@ function useEditor() {
     deleteBlockFromParent,
     changeCaretPosition,
     collapseCaretToNode,
-    gelBlockCaretPosition,
+    getBlockCaretPosition,
     // registerChildren,
   };
 }
