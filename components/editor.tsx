@@ -21,12 +21,10 @@ export function Editor() {
         onClick={(event) => {
           if (event.currentTarget !== event.target) return;
           const lastBlock = editor.blocks.at(-1);
-          if (lastBlock && !lastBlock.el?.textContent) {
-            return editor.focusBlock(lastBlock.id);
+          if (!lastBlock || lastBlock.el?.textContent) {
+            const newBlock = editor.addBlock();
+            editor.focusBlock(newBlock);
           }
-          const newBlock = editor.addBlock();
-          if (!newBlock) return;
-          editor.focusBlock(newBlock.id);
         }}
         className={"min-h-full border cursor-text"}
       >
@@ -58,109 +56,61 @@ export function Block({
         contentEditable
         suppressContentEditableWarning
         onKeyDown={(event) => {
-          const key = event.key;
-          if (!event.shiftKey && key.toLowerCase() === "enter") {
-            if (editor.commandPromptState.open) {
-              event.preventDefault();
-              const inlineOptionBlock = editor.insertInlineOption(block.id);
-              editor.closeCommandPrompt();
-              document.getSelection()?.collapse(inlineOptionBlock?.children[0].el!, 0);
-              return;
-            }
+          assert(!!block.el, "No dom node associate with this block: " + block.id);
+          if (!event.shiftKey && event.key.toLowerCase() === "enter") {
             event.preventDefault();
-            const anchorOffset = block.selection?.anchorOffset;
-            const contentLength = event.currentTarget.textContent?.length;
-            const isEndOfLine = anchorOffset && contentLength && anchorOffset <= contentLength;
-            if (isEndOfLine) {
-              const newBlock = editor.addBlockAfter(block);
-              const newElement = newBlock.el!;
-              const blockElement = block.selection?.anchorNode!;
-              document.getSelection()?.collapse(block.selection?.anchorNode!, anchorOffset - 1);
-              if (blockElement && newElement) {
-                const textContent = blockElement.textContent!;
-                const part1 = textContent.substring(0, anchorOffset);
-                const part2 = textContent.substring(anchorOffset);
-                blockElement.textContent = part1;
-                newElement.textContent = part2;
-                document.getSelection()?.collapse(blockElement, anchorOffset);
-                // editor.updateCaretPosition(newBlock);
-              }
-            }
-            return;
-          }
-          if (key.toLowerCase() === "backspace") {
-            const range = document.getSelection()?.getRangeAt(0);
-            if (range) {
-              const caretBlock = editor.getBlockFromNode(range.commonAncestorContainer);
-              if (!caretBlock) return;
-              const isEmpty = caretBlock.el?.textContent?.length === 0;
-              if (isEmpty && caretBlock.type === "inline-option-1") {
-                event.preventDefault();
-                editor.deleteBlockFromParent(caretBlock.parent!.parent!, caretBlock.parent!);
-                // editor.updateCaretPosition(block.id);
-              }
-              if (isEmpty && caretBlock.type === "inline-option-2") {
-                event.preventDefault();
-                console.log({ caretBlock });
-                const sibling = caretBlock.parent?.children[0];
-                document
-                  .getSelection()
-                  ?.collapse(sibling?.selection?.anchorNode, sibling?.selection?.anchorOffset);
-              }
-            }
-            const anchorOffset = block.selection!.anchorOffset;
-            if (anchorOffset > 0) return;
-
-            const blockIndex = editor.blocks.findIndex((b) => b.id === block.id);
-            const previousBlock = editor.blocks[blockIndex - 1];
-            if (previousBlock) {
-              event.preventDefault();
-              editor.deleteBlock(block);
-              editor.focusBlock(previousBlock.id, { restoreCaretPosition: true });
+            if (editor.commandPromptState.open) {
+              const inlineOption = editor.insertInlineOption(block);
+              const selection = document.getSelection();
+              assert(!!selection, "selection is null");
+              const rangeCount = selection.rangeCount;
+              console.log({ rangeCount });
+              editor.closeCommandPrompt();
+              // const anchorOffset = selection.anchorOffset;
+              const inlineOption1 = inlineOption.children[0];
+              assert(!!inlineOption1.el, "No dom node associate with this block: " + block.id);
+              editor.collapseCaretToNode(inlineOption1.el, 0);
+              // document.getSelection()?.collapse(inlineOption1.el, 0);
+              // editor.changeCaretPosition(block, anchorOffset + 1);
               return;
             }
+            const newBlock = editor.addBlockAfter(block);
+            editor.focusBlock(newBlock);
           }
-          if (key === "/") {
+          if (event.key.toLowerCase() === "arrowup") {
+            event.preventDefault();
+            const index = editor.blocks.findIndex((b) => b.id === block.id);
+            const previousBlock = editor.blocks[index - 1];
+            if (previousBlock) {
+              const selection = document.getSelection();
+              assert(!!selection, "selection is null");
+              const anchorOffset = selection.anchorOffset;
+              editor.focusBlock(previousBlock);
+              editor.changeCaretPosition(previousBlock, anchorOffset);
+            }
+          }
+          if (event.key.toLowerCase() === "arrowdown") {
+            event.preventDefault();
+            const index = editor.blocks.findIndex((b) => b.id === block.id);
+            const nextBlock = editor.blocks[index + 1];
+            if (nextBlock) {
+              const caretPos = editor.gelBlockCaretPosition(block);
+              // const selection = document.getSelection();
+              // assert(!!selection, "selection is null");
+              // const anchorOffset = selection?.anchorOffset;
+              // console.log({ anchorOffset });
+              // editor.focusBlock(nextBlock);
+              editor.changeCaretPosition(nextBlock, caretPos);
+            }
+          }
+          if (event.key.toLowerCase() === "/") {
             event.preventDefault();
             const span = document.createElement("span");
             span.textContent = "/";
-            event.currentTarget.appendChild(span);
-            editor.showCommandPrompt(block.id);
-            document.getSelection()?.collapse(span.childNodes[0], 1);
-            const mutationObserver = new MutationObserver((list) => {
-              for (const item of list) {
-                if (item.removedNodes.values().find((node) => node === span)) {
-                  editor.closeCommandPrompt();
-                }
-              }
-            });
-            mutationObserver.observe(span.childNodes[0], { characterData: true });
-            mutationObserver.observe(event.currentTarget, { subtree: true, childList: true });
-            return;
-          }
-          if (key.toLowerCase() === "arrowup") {
-            const blockIndex = editor.blocks.findIndex((b) => b.id === block.id);
-            const previousBlock = editor.blocks[blockIndex - 1];
-            if (previousBlock) {
-              event.preventDefault();
-              editor.focusBlock(previousBlock.id, { restoreCaretPosition: true });
-            }
-          }
-          if (key.toLowerCase() === "arrowdown") {
-            const blockIndex = editor.blocks.findIndex((b) => b.id === block.id);
-            const nextBlock = editor.blocks[blockIndex + 1];
-            if (nextBlock) {
-              event.preventDefault();
-              editor.focusBlock(nextBlock.id, { restoreCaretPosition: true });
-            }
+            block.el.append(span);
+            editor.openCommandPrompt(block, span);
           }
         }}
-        onKeyUp={(event) => {
-          const key = event.key;
-          if (!event.shiftKey && key.toLowerCase() === "enter") return;
-          // editor.updateCaretPosition(block);
-        }}
-        // onClick={(event) => editor.updateCaretPosition(block)}
         className={"w-full flex items-center"}
       >
         {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
@@ -198,112 +148,83 @@ export function EditorTitle() {
   return <div>Untitled Test</div>;
 }
 
+type TInlineOption = TBlock & {
+  parent: TBlock;
+};
 type TBlock = {
   id: string;
   type: string;
   el?: HTMLDivElement;
   children: TBlock[];
-  parent: TBlock | null;
-  selection: { anchorNode: Node | null; anchorOffset: number } | null;
+  // parent: TBlock | null;
 };
 function useEditor() {
+  const carretPos = useRef(0);
   const blockMapRef = useRef<Map<HTMLElement, TBlock>>(new Map());
   const blocksRef = useRef<TBlock[]>([]);
   const [_, setRender] = useState(false);
   const [commandPromptState, setCommandPromptState] = useState<{
     block: TBlock | null;
+    anchor: HTMLElement | null;
     open: boolean;
     top: number;
     left: number;
   }>({
     block: null,
+    anchor: null,
     open: false,
     left: 0,
     top: 0,
   });
   const [observer] = useState(
     new MutationObserver((entries) => {
-      const selection = document.getSelection();
-      if (!selection) return;
-      const anchorNode = selection.anchorNode;
-      const anchorOffset = selection.anchorOffset;
       for (const entry of entries) {
-        if (entry.target instanceof HTMLElement) {
-          const block = blockMapRef.current.get(entry.target);
-          if (!block || !selection) continue;
-          block.selection = { anchorNode: anchorNode, anchorOffset: anchorOffset };
-        } else {
-          const block = blockMapRef.current.get(entry.target.parentElement as HTMLElement);
-          if (!block || !selection) continue;
-          block.selection = {
-            anchorNode: selection.anchorNode,
-            anchorOffset: selection.anchorOffset,
-          };
+        if (entry.type === "childList") {
+          // carretPos.current = entry.target.textContent
         }
       }
     }),
   );
 
-  useEffect(() => {
-    return () => observer.disconnect();
-  }, []);
+  // useEffect(() => {
+  //   return () => observer.disconnect();
+  // }, []);
 
-  function focusBlock(id: string, options?: { restoreCaretPosition: boolean }) {
-    const block = blocksRef.current.find((b) => b.id === id);
-    if (!block) return;
-    block.el?.focus();
-    if (options?.restoreCaretPosition && block.selection) {
-      console.log(block.selection.anchorNode, block.selection.anchorOffset);
-      document.getSelection()?.collapse(block.selection.anchorNode, block.selection.anchorOffset);
-    }
+  function focusBlock(block: TBlock, options?: { restoreCaretPosition: boolean }) {
+    assert(!!block, "no block found");
+    assert(!!block.el, "No dom node associate with this block: " + block.id);
+
+    block.el.focus();
   }
 
   // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
   function addBlock() {
-    const newBlock = {
-      id: crypto.randomUUID(),
-      type: "block",
-      selection: null,
-      children: [],
-      parent: null,
-    };
-    const index = blocksRef.current.push(newBlock);
+    const newBlock: TBlock = { id: crypto.randomUUID(), type: "block", children: [] };
+    blocksRef.current.push(newBlock);
     flushSync(() => setRender((prev) => !prev));
-    return blocksRef.current[index - 1];
+    // observer.observe(newBlock.el!, { childList: true });
+    return newBlock;
   }
 
-  function addBlockAfter(block: any) {
-    const newBlock = {
-      id: crypto.randomUUID(),
-      type: "block",
-      selection: null,
-      children: [],
-      parent: null,
-    };
-    const index = blocksRef.current.findIndex((b) => b.id === block.id) + 1;
-    blocksRef.current.splice(index, 0, newBlock);
+  function addBlockAfter(block: TBlock) {
+    const index = blocksRef.current.findIndex((b) => b.id === block.id);
+    const newBLock: TBlock = { id: crypto.randomUUID(), type: "block", children: [] };
+    blocksRef.current.splice(index + 1, 0, newBLock);
     flushSync(() => setRender((prev) => !prev));
-    return blocksRef.current[index];
+    return newBLock;
   }
 
-  function deleteBlock(block: TBlock) {
-    const blockIndex = blocksRef.current.findIndex((b) => b === block);
-    if (blockIndex === -1) {
-      return;
-    }
-    blocksRef.current.splice(blockIndex, 1);
-    flushSync(() => setRender((prev) => !prev));
-  }
+  function deleteBlock(block: TBlock) {}
 
   const registerBlock = useCallback((block: TBlock) => {
     return (current: HTMLDivElement) => {
       block.el = current;
       if (current) blockMapRef.current.set(current, block);
-      if (current)
-        observer.observe(current, { characterData: true, subtree: true, childList: true });
-      return () => {
-        if (current) blockMapRef.current.delete(current);
-      };
+      // if (current)
+      //   observer.observe(current, { characterData: true, subtree: true, childList: true });
+      // return () => {
+      //   if (current) blockMapRef.current.delete(current);
+      // };
     };
   }, []);
 
@@ -317,94 +238,145 @@ function useEditor() {
   //   };
   // }, []);
 
-  function showCommandPrompt(id: string) {
-    const block = blocksRef.current.find((b) => b.id === id);
+  function openCommandPrompt(block: TBlock, anchor: HTMLElement) {
+    // assert(!!block.el, "No dom node associate with this block: " + block.id);
+    const elementRect = anchor.getBoundingClientRect();
     const selection = document.getSelection();
-    if (!selection || !block?.el) return null;
-    const elementRect = block.el.getBoundingClientRect();
+    assert(!!selection, "no selection");
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
+
     flushSync(() =>
       setCommandPromptState({
         block,
+        anchor,
         open: true,
         left: rect.left,
         top: rect.top + elementRect.height,
       }),
     );
-    focusBlock(block.id);
-    // const div = document.createElement("div");
-    // div.style.position = "fixed";
-    // div.style.left = rect.left + "px";
-    // div.style.top = rect.top + elementRect.height + "px";
-    // div.style.width = "100px";
-    // div.style.height = "100px";
-    // div.style.background = "blue";
-    // div.style.zIndex = "9999";
-    // document.body.appendChild(div);
+    selection.collapse(anchor.childNodes[0], 1);
   }
 
   function closeCommandPrompt() {
+    const block = commandPromptState.block;
+    if (!block || !commandPromptState.anchor) return;
+    assert(!!block.el, "No dom node associate with this block: " + block.id);
+    block.el.removeChild(commandPromptState.anchor);
     setCommandPromptState((prev) => ({ ...prev, open: false }));
   }
 
-  function updateCaretPosition(block: TBlock) {
-    block.el?.focus();
-    const selection = document.getSelection();
-    if (!selection) return;
-    block.selection = { anchorNode: selection.anchorNode, anchorOffset: selection.anchorOffset };
-    console.log(selection, selection.anchorOffset, selection.rangeCount);
-  }
+  function updateCaretPosition(block: TBlock) {}
 
-  function insertInlineOption(id: string) {
-    const block = blocksRef.current.find((b) => b.id === id);
-    if (!block) return null;
-    const inlineOptionBlock: TBlock = {
+  function insertInlineOption(block: TBlock) {
+    const inlineOption: TInlineOption = {
       id: crypto.randomUUID(),
       type: "inline-option",
       children: [],
-      selection: null,
       parent: block,
     };
-    inlineOptionBlock.children.push({
+    const inlineOption1: TInlineOption = {
       id: crypto.randomUUID(),
       type: "inline-option-1",
       children: [],
-      selection: null,
-      parent: inlineOptionBlock,
-    });
-    inlineOptionBlock.children.push({
+      parent: inlineOption,
+    };
+    const inlineOption2: TInlineOption = {
       id: crypto.randomUUID(),
       type: "inline-option-2",
       children: [],
-      selection: null,
-      parent: inlineOptionBlock,
-    });
-    block.children.push(inlineOptionBlock);
+      parent: inlineOption,
+    };
+    inlineOption.children = [inlineOption1, inlineOption2];
+
+    block.children.push(inlineOption);
+
     flushSync(() => setRender((prev) => !prev));
 
-    return inlineOptionBlock;
+    return inlineOption;
   }
 
-  function getBlockFromNode(node: HTMLElement | Node) {
-    if (node instanceof HTMLElement) {
-      return blockMapRef.current.get(node);
+  function getBlockFromNode(node: HTMLElement | Node) {}
+
+  function deleteBlockFromParent(parent: TBlock, block: TBlock) {}
+
+  function a(node: Node, startOffSet: number) {
+    let result = [];
+    for (const childNode of node.childNodes) {
+      if (childNode.nodeType === 3) {
+        result.push([childNode, startOffSet, (startOffSet += childNode.textContent?.length ?? 0)]);
+      } else {
+        result.push(...a(childNode, startOffSet));
+        const last = result.at(-1);
+        if (last) {
+          startOffSet = last[2];
+        }
+      }
     }
 
-    if (node.nodeType !== 1 && node.parentElement) {
-      node = node.parentElement;
-      return blockMapRef.current.get(node as HTMLElement);
+    return result;
+  }
+  // TODO: I don't know how to get the correct text node to set caret position, here are blockers
+  // - The startContainer in Range object is not always the text node, sometime it will be the parent div
+  // - The only way to know if position is in whithin a range is by using isPointInRange, but we don't know
+  //  if the position is less or more than the range offset
+  function changeCaretPosition(block: TBlock, position: number) {
+    assert(!!block.el, "No dom node associate with this block: " + block.id);
+    const result = a(block.el, 0);
+    for (const item of result) {
+      if (item[0] instanceof Node) {
+        if (position > item[1] && position <= item[2]) {
+          const selection = document.getSelection();
+          assert(!!selection, "no selection");
+          selection.collapse(item[0], position - item[1]);
+          return;
+        }
+      }
     }
 
+    const lastNode = result.at(-1);
+    if (!lastNode) return;
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    selection.collapse(lastNode[0], lastNode[0].textContent.length)
+  }
+
+  function gelBlockCaretPosition(block: TBlock) {
+    assert(!!block.el, "No dom node associate with this block: " + block.id);
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    const endNode = selection.focusNode;
+    const endOffset = selection.focusOffset;
+    const result = a(block.el, 0);
+    for (const item of result) {
+      if (item[0] instanceof Node) {
+        if (item[0] === endNode) {
+          return item[1] + endOffset;
+        }
+      }
+    }
+  }
+
+  function isPointInRange(range: Range, node: Node, position: number) {
+    try {
+      return range.isPointInRange(node, position);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function getTextNode(container: Node) {
+    for (const child of container.childNodes) {
+      if (child.nodeType === 3) return container;
+    }
     return null;
   }
 
-  function deleteBlockFromParent(parent: TBlock, block: TBlock) {
-    console.log({ parent, block });
-    const index = parent.children.findIndex((c) => c === block);
-    if (index === -1) return;
-    parent.children.splice(index, 1);
-    flushSync(() => setRender((prev) => !prev));
+  function collapseCaretToNode(node: HTMLElement, position: number) {
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    console.log(node, position);
+    selection.collapse(node, position);
   }
 
   return {
@@ -416,12 +388,15 @@ function useEditor() {
     addBlockAfter,
     registerBlock,
     deleteBlock,
-    showCommandPrompt,
+    openCommandPrompt,
     updateCaretPosition,
     closeCommandPrompt,
     insertInlineOption,
     getBlockFromNode,
     deleteBlockFromParent,
+    changeCaretPosition,
+    collapseCaretToNode,
+    gelBlockCaretPosition,
     // registerChildren,
   };
 }
@@ -514,4 +489,8 @@ function CommandPrompt2({ editor }: { editor: ReturnType<typeof useEditor> }) {
     </div>,
     document.body,
   );
+}
+
+function assert(value: boolean, message?: string): asserts value {
+  if (!value) throw new Error(message);
 }
