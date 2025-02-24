@@ -21,16 +21,16 @@ export function Editor() {
         onClick={(event) => {
           if (event.currentTarget !== event.target) return;
           const lastBlock = editor.blocks.at(-1);
-          if (!lastBlock || lastBlock.el?.textContent) {
+          if (!lastBlock || lastBlock.target?.textContent) {
             const newBlock = editor.addBlock();
             editor.focusBlock(newBlock);
-            editor.updateCaretPosition(newBlock);
+            // editor.updateCaretPosition(newBlock);
           }
         }}
         className={"min-h-full border cursor-text"}
       >
         {editor.blocks.map((block) => {
-          return <Block key={block.id} editor={editor} block={block} />;
+          return <Block key={block.id} editor={editor} block={block as LineBlock} />;
         })}
         {/* <CommandPrompt editor={editor} /> */}
       </div>
@@ -39,13 +39,11 @@ export function Editor() {
   );
 }
 
-export function Block({
-  editor,
-  block,
-}: {
+type BlockProps = {
   editor: ReturnType<typeof useEditor>;
-  block: ReturnType<typeof useEditor>["blocks"][number];
-}) {
+  block: LineBlock;
+};
+export function Block({ editor, block }: BlockProps) {
   const ref = useCallback(editor.registerBlock(block), []);
 
   return (
@@ -57,8 +55,9 @@ export function Block({
         contentEditable
         suppressContentEditableWarning
         onKeyDown={(event) => {
-          assert(!!block.el, "No dom node associate with this block: " + block.id);
-          if (!event.shiftKey && event.key.toLowerCase() === "enter") {
+          assert(!!block.target, "No dom node associate with this block: " + block.id);
+          const key = event.key.toLowerCase();
+          if (!event.shiftKey && key === "enter") {
             event.preventDefault();
             if (editor.commandPromptState.open) {
               const inlineOption = editor.insertInlineOption(block);
@@ -66,34 +65,42 @@ export function Block({
               assert(!!selection, "selection is null");
               editor.closeCommandPrompt();
               const inlineOption1 = inlineOption.children[0];
-              assert(!!inlineOption1.el, "No dom node associate with this block: " + block.id);
-              editor.collapseCaretToNode(inlineOption1.el, 0);
+              assert(!!inlineOption1.target, "No dom node associate with this block: " + block.id);
+              editor.collapseCaretToNode(inlineOption1.target, 0);
               return;
             }
             const newBlock = editor.addBlockAfter(block);
             editor.focusBlock(newBlock);
           }
-          if (event.key.toLowerCase() === "arrowup") {
+          if (key === "arrowup") {
             event.preventDefault();
-            const index = editor.blocks.findIndex((b) => b.id === block.id);
-            const previousBlock = editor.blocks[index - 1];
-            if (previousBlock) {
-              editor.focusBlock(previousBlock);
-            }
+            editor.moveCaretPosition("up", -1);
           }
-          if (event.key.toLowerCase() === "arrowdown") {
+          if (key === "arrowdown") {
             event.preventDefault();
-            const index = editor.blocks.findIndex((b) => b.id === block.id);
-            const nextBlock = editor.blocks[index + 1];
-            if (nextBlock) {
-              editor.focusBlock(nextBlock);
-            }
+            editor.moveCaretPosition("down", 1);
           }
-          if (event.key.toLowerCase() === "/") {
+          if (key === "arrowleft") {
+            event.preventDefault();
+            editor.moveCaretPosition("left", -1);
+          }
+          if (key === "arrowright") {
+            event.preventDefault();
+            editor.moveCaretPosition("right", 1);
+          }
+          if (
+            key !== "arrowup" &&
+            key !== "arrowdown" &&
+            key !== "arrowleft" &&
+            key !== "arrowright"
+          ) {
+            editor.resetIntentCaret();
+          }
+          if (key === "/") {
             event.preventDefault();
             const span = document.createElement("span");
             span.textContent = "/";
-            block.el.append(span);
+            block.target.append(span);
             editor.openCommandPrompt(block, span);
           }
         }}
@@ -136,69 +143,56 @@ export function EditorTitle() {
   return <div>Untitled Test</div>;
 }
 
-type TInlineOption = TBlock & {
-  parent: TBlock;
-};
-type TBlock = {
-  id: string;
-  type: string;
-  el?: HTMLDivElement;
-  children: TBlock[];
-  caretPos: number;
-  // parent: TBlock | null;
+type CommandPromptState = {
+  block: IBlock | null;
+  anchor: HTMLElement | null;
+  open: boolean;
+  top: number;
+  left: number;
 };
 function useEditor() {
-  const intentCaretPos = useRef(0);
-  const blockMapRef = useRef<Map<HTMLElement, TBlock>>(new Map());
-  const blocksRef = useRef<TBlock[]>([]);
+  const intentCaret = useRef<number | undefined>(undefined);
+  const blockMapRef = useRef<Map<HTMLElement, IBlock>>(new Map());
+  const blocksRef = useRef<LineBlock[]>([]);
   const [_, setRender] = useState(false);
-  const [commandPromptState, setCommandPromptState] = useState<{
-    block: TBlock | null;
-    anchor: HTMLElement | null;
-    open: boolean;
-    top: number;
-    left: number;
-  }>({
+  const [commandPromptState, setCommandPromptState] = useState<CommandPromptState>({
     block: null,
     anchor: null,
     open: false,
     left: 0,
     top: 0,
   });
-  const [observer] = useState(
-    new MutationObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.type === "childList") {
-          // carretPos.current = entry.target.textContent
-        }
-      }
-    }),
-  );
 
-  function focusBlock(block: TBlock) {
+  function focusBlock(block: IBlock) {
     assert(!!block, "no block found");
-    assert(!!block.el, "No dom node associate with this block: " + block.id);
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
 
-    block.el.focus();
+    block.target.focus();
   }
 
   // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
   function addBlock() {
-    const newBlock: TBlock = { id: crypto.randomUUID(), type: "block", children: [], caretPos: 0 };
-    blocksRef.current.push(newBlock);
-    flushSync(() => setRender((prev) => !prev));
-    // observer.observe(newBlock.el!, { childList: true });
-    newBlock.caretPos = getBlockCaretPosition(newBlock);
-    return newBlock;
-  }
-
-  function addBlockAfter(block: TBlock) {
-    const index = blocksRef.current.findIndex((b) => b.id === block.id);
-    const newBlock: TBlock = {
+    const newBlock: LineBlock = {
       id: crypto.randomUUID(),
       type: "block",
       children: [],
       caretPos: 0,
+      target: null,
+    };
+    blocksRef.current.push(newBlock);
+    flushSync(() => setRender((prev) => !prev));
+    newBlock.caretPos = getBlockCaretPosition(newBlock);
+    return newBlock;
+  }
+
+  function addBlockAfter(block: IBlock) {
+    const index = blocksRef.current.findIndex((b) => b.id === block.id);
+    const newBlock: LineBlock = {
+      id: crypto.randomUUID(),
+      type: "block",
+      children: [],
+      caretPos: 0,
+      target: null,
     };
     blocksRef.current.splice(index + 1, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
@@ -206,11 +200,11 @@ function useEditor() {
     return newBlock;
   }
 
-  function deleteBlock(block: TBlock) {}
+  function deleteBlock(block: IBlock) {}
 
-  const registerBlock = useCallback((block: TBlock) => {
+  const registerBlock = useCallback((block: IBlock) => {
     return (current: HTMLDivElement) => {
-      block.el = current;
+      block.target = current;
       if (current) blockMapRef.current.set(current, block);
       // if (current)
       //   observer.observe(current, { characterData: true, subtree: true, childList: true });
@@ -230,7 +224,7 @@ function useEditor() {
   //   };
   // }, []);
 
-  function openCommandPrompt(block: TBlock, anchor: HTMLElement) {
+  function openCommandPrompt(block: IBlock, anchor: HTMLElement) {
     // assert(!!block.el, "No dom node associate with this block: " + block.id);
     const elementRect = anchor.getBoundingClientRect();
     const selection = document.getSelection();
@@ -253,19 +247,18 @@ function useEditor() {
   function closeCommandPrompt() {
     const block = commandPromptState.block;
     if (!block || !commandPromptState.anchor) return;
-    assert(!!block.el, "No dom node associate with this block: " + block.id);
-    block.el.removeChild(commandPromptState.anchor);
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    block.target.removeChild(commandPromptState.anchor);
     setCommandPromptState((prev) => ({ ...prev, open: false }));
   }
 
-  function updateCaretPosition(block: TBlock) {
-    assert(!!block.el, "No dom node associate with this block: " + block.id);
+  function updateCaretPosition(block: LineBlock) {
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
     const selection = document.getSelection();
     assert(!!selection, "no selection");
     const endNode = selection.focusNode;
     const endOffset = selection.focusOffset;
-    const result = a(block.el, 0);
-    console.log(result, selection);
+    const result = a(block.target, 0);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (item[0] === endNode) {
@@ -276,27 +269,27 @@ function useEditor() {
     }
   }
 
-  function insertInlineOption(block: TBlock) {
-    const inlineOption: TInlineOption = {
+  function insertInlineOption(block: IBlock) {
+    const inlineOption: InlineBlock = {
       id: crypto.randomUUID(),
       type: "inline-option",
       children: [],
       parent: block,
-      caretPos: 0,
+      target: null,
     };
-    const inlineOption1: TInlineOption = {
+    const inlineOption1: InlineBlock = {
       id: crypto.randomUUID(),
       type: "inline-option-1",
       children: [],
       parent: inlineOption,
-      caretPos: 0,
+      target: null,
     };
-    const inlineOption2: TInlineOption = {
+    const inlineOption2: InlineBlock = {
       id: crypto.randomUUID(),
       type: "inline-option-2",
       children: [],
       parent: inlineOption,
-      caretPos: 0,
+      target: null,
     };
     inlineOption.children = [inlineOption1, inlineOption2];
 
@@ -309,7 +302,7 @@ function useEditor() {
 
   function getBlockFromNode(node: HTMLElement | Node) {}
 
-  function deleteBlockFromParent(parent: TBlock, block: TBlock) {}
+  function deleteBlockFromParent(parent: IBlock, block: IBlock) {}
 
   function a(node: Node, startOffSet: number): any[] {
     let result = [];
@@ -337,14 +330,16 @@ function useEditor() {
   // - if caret go from aline with fewer text to a line with longer text, the caret position
   // will go to the previous position of the longer text if the position of the fewer text
   // is different with the position of the longer text
-  function changeCaretPosition(block: TBlock, position: number) {
-    assert(!!block.el, "No dom node associate with this block: " + block.id);
-    const result = a(block.el, 0);
+  function changeCaretPosition(block: IBlock, position: number) {
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    const result = a(block.target, 0);
+    console.log(position, result);
     for (const item of result) {
       if (item[0] instanceof Node) {
-        if (position > item[1] && position <= item[2]) {
+        if (position >= item[1] && position <= item[2]) {
           const selection = document.getSelection();
           assert(!!selection, "no selection");
+          console.log(item[0], position - item[1]);
           selection.collapse(item[0], position - item[1]);
           return;
         }
@@ -358,26 +353,56 @@ function useEditor() {
     // selection.collapse(lastNode[0], lastNode[0].textContent.length);
   }
 
-  function moveCaretPosition(from: TBlock, to: TBlock) {
-    assert(!!from.el, "No dom node associate with this block: " + from.id);
-    assert(!!to.el, "No dom node associate with this block: " + to.id);
-
-    const fromTextLen = from.el.textContent?.length ?? 0;
-    const toTextLen = from.el.textContent?.length ?? 0;
-    if (fromTextLen > toTextLen) {
-      changeCaretPosition(to, toTextLen);
-      intentCaretPos.current = from.caretPos;
-      return;
+  function moveCaretPosition(direction: "up" | "down" | "left" | "right", offset: number) {
+    if (direction === "up" || direction === "down") {
+      const currentBlockIdx = blocksRef.current.findIndex(
+        (b) => document.activeElement === b.target,
+      );
+      const from = blocksRef.current[currentBlockIdx];
+      const to = blocksRef.current[currentBlockIdx + offset];
+      console.log({ currentBlockIdx, from, to });
+      if (!to) return;
+      assert(!!from.target, "No dom node associate with this block: " + from.id);
+      assert(!!to.target, "No dom node associate with this block: " + to.id);
+      const fromCaret = getBlockCaretPosition(from);
+      const toTextLen = to.target.textContent?.length ?? 0;
+      console.log({ fromCaret, toTextLen, intent: intentCaret.current });
+      if (fromCaret > toTextLen && !intentCaret.current) {
+        intentCaret.current = from.caretPos;
+        focusBlock(to);
+        changeCaretPosition(to, toTextLen);
+        return;
+      }
+      if (intentCaret.current) {
+        focusBlock(to);
+        changeCaretPosition(to, Math.min(intentCaret.current, toTextLen));
+        return;
+      }
+      const caretPos = getBlockCaretPosition(from);
+      focusBlock(to);
+      changeCaretPosition(to, caretPos);
+    }
+    if (direction === "left" || direction === "right") {
+      if (intentCaret.current) intentCaret.current = undefined;
+      const currentBlockIdx = blocksRef.current.findIndex(
+        (b) => document.activeElement === b.target,
+      );
+      const from = blocksRef.current[currentBlockIdx];
+      changeCaretPosition(from, getBlockCaretPosition(from) + offset);
     }
   }
 
-  function getBlockCaretPosition(block: TBlock) {
-    assert(!!block.el, "No dom node associate with this block: " + block.id);
+  function resetIntentCaret() {
+    intentCaret.current = undefined;
+  }
+
+  function getBlockCaretPosition(block: IBlock) {
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
     const selection = document.getSelection();
     assert(!!selection, "no selection");
     const endNode = selection.focusNode;
     const endOffset = selection.focusOffset;
-    const result = a(block.el, 0);
+    const result = a(block.target, 0);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (item[0] === endNode) {
@@ -387,17 +412,6 @@ function useEditor() {
     }
 
     return 0;
-  }
-
-  function handleArrowKey(key: string, block: TBlock) {
-    if (key === "arrowup") {
-    }
-    if (key === "arrowdown") {
-    }
-    if (key === "arrowleft") {
-    }
-    if (key === "arrowright") {
-    }
   }
 
   function collapseCaretToNode(node: HTMLElement, position: number) {
@@ -425,6 +439,7 @@ function useEditor() {
     collapseCaretToNode,
     getBlockCaretPosition,
     moveCaretPosition,
+    resetIntentCaret,
     // registerChildren,
   };
 }
@@ -530,42 +545,10 @@ interface IBlock {
   children: IBlock[];
 }
 
-class LineBlock implements IBlock {
-  id: string;
-  type: string;
-  target: HTMLDivElement | null;
-  children: IBlock[];
-  editor: BlockEditor;
-
-  constructor(
-    id: string,
-    type: string,
-    target: HTMLDivElement | null,
-    children: IBlock[],
-    editor: BlockEditor,
-  ) {
-    this.id = id;
-    this.type = type;
-    this.target = target;
-    this.children = children;
-    this.editor = editor;
-  }
+interface LineBlock extends IBlock {
+  caretPos: number;
 }
 
-class BlockEditor {
-  blocks: IBlock[] = [];
-  eventTarget = new EventTarget();
-
-  addBlock() {
-    const block = new LineBlock(crypto.randomUUID(), "block", null, [], this);
-    this.blocks.push(block);
-    this.eventTarget.dispatchEvent(new CustomEvent("add-block", { detail: { block } }));
-    return block;
-  }
-
-  on(eventName: "add-block", callback: (block: Event) => void) {
-    this.eventTarget.addEventListener(eventName, (event) => {
-      callback(event);
-    });
-  }
+interface InlineBlock extends IBlock {
+  parent: IBlock;
 }
