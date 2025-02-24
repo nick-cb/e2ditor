@@ -64,14 +64,10 @@ export function Block({
               const inlineOption = editor.insertInlineOption(block);
               const selection = document.getSelection();
               assert(!!selection, "selection is null");
-              const rangeCount = selection.rangeCount;
               editor.closeCommandPrompt();
-              // const anchorOffset = selection.anchorOffset;
               const inlineOption1 = inlineOption.children[0];
               assert(!!inlineOption1.el, "No dom node associate with this block: " + block.id);
               editor.collapseCaretToNode(inlineOption1.el, 0);
-              // document.getSelection()?.collapse(inlineOption1.el, 0);
-              // editor.changeCaretPosition(block, anchorOffset + 1);
               return;
             }
             const newBlock = editor.addBlockAfter(block);
@@ -82,11 +78,7 @@ export function Block({
             const index = editor.blocks.findIndex((b) => b.id === block.id);
             const previousBlock = editor.blocks[index - 1];
             if (previousBlock) {
-              const selection = document.getSelection();
-              assert(!!selection, "selection is null");
-              const anchorOffset = selection.anchorOffset;
               editor.focusBlock(previousBlock);
-              editor.changeCaretPosition(previousBlock, anchorOffset);
             }
           }
           if (event.key.toLowerCase() === "arrowdown") {
@@ -94,13 +86,7 @@ export function Block({
             const index = editor.blocks.findIndex((b) => b.id === block.id);
             const nextBlock = editor.blocks[index + 1];
             if (nextBlock) {
-              const caretPos = editor.getBlockCaretPosition(block);
-              // const selection = document.getSelection();
-              // assert(!!selection, "selection is null");
-              // const anchorOffset = selection?.anchorOffset;
-              // console.log({ anchorOffset });
               editor.focusBlock(nextBlock);
-              editor.changeCaretPosition(nextBlock, caretPos);
             }
           }
           if (event.key.toLowerCase() === "/") {
@@ -162,7 +148,7 @@ type TBlock = {
   // parent: TBlock | null;
 };
 function useEditor() {
-  const carretPos = useRef(0);
+  const intentCaretPos = useRef(0);
   const blockMapRef = useRef<Map<HTMLElement, TBlock>>(new Map());
   const blocksRef = useRef<TBlock[]>([]);
   const [_, setRender] = useState(false);
@@ -189,11 +175,7 @@ function useEditor() {
     }),
   );
 
-  // useEffect(() => {
-  //   return () => observer.disconnect();
-  // }, []);
-
-  function focusBlock(block: TBlock, options?: { restoreCaretPosition: boolean }) {
+  function focusBlock(block: TBlock) {
     assert(!!block, "no block found");
     assert(!!block.el, "No dom node associate with this block: " + block.id);
 
@@ -349,10 +331,12 @@ function useEditor() {
 
     return result;
   }
-  // TODO: I don't know how to get the correct text node to set caret position, here are blockers
-  // - The startContainer in Range object is not always the text node, sometime it will be the parent div
-  // - The only way to know if position is in whithin a range is by using isPointInRange, but we don't know
-  //  if the position is less or more than the range offset
+
+  // - if caret go from a line with longer text to a line with fewer text, the caret position
+  // will go to the position of the longer text
+  // - if caret go from aline with fewer text to a line with longer text, the caret position
+  // will go to the previous position of the longer text if the position of the fewer text
+  // is different with the position of the longer text
   function changeCaretPosition(block: TBlock, position: number) {
     assert(!!block.el, "No dom node associate with this block: " + block.id);
     const result = a(block.el, 0);
@@ -367,11 +351,24 @@ function useEditor() {
       }
     }
 
-    const lastNode = result.at(-1);
-    if (!lastNode) return;
-    const selection = document.getSelection();
-    assert(!!selection, "no selection");
-    selection.collapse(lastNode[0], lastNode[0].textContent.length);
+    // const lastNode = result.at(-1);
+    // if (!lastNode) return;
+    // const selection = document.getSelection();
+    // assert(!!selection, "no selection");
+    // selection.collapse(lastNode[0], lastNode[0].textContent.length);
+  }
+
+  function moveCaretPosition(from: TBlock, to: TBlock) {
+    assert(!!from.el, "No dom node associate with this block: " + from.id);
+    assert(!!to.el, "No dom node associate with this block: " + to.id);
+
+    const fromTextLen = from.el.textContent?.length ?? 0;
+    const toTextLen = from.el.textContent?.length ?? 0;
+    if (fromTextLen > toTextLen) {
+      changeCaretPosition(to, toTextLen);
+      intentCaretPos.current = from.caretPos;
+      return;
+    }
   }
 
   function getBlockCaretPosition(block: TBlock) {
@@ -392,19 +389,15 @@ function useEditor() {
     return 0;
   }
 
-  function isPointInRange(range: Range, node: Node, position: number) {
-    try {
-      return range.isPointInRange(node, position);
-    } catch (error) {
-      return false;
+  function handleArrowKey(key: string, block: TBlock) {
+    if (key === "arrowup") {
     }
-  }
-
-  function getTextNode(container: Node) {
-    for (const child of container.childNodes) {
-      if (child.nodeType === 3) return container;
+    if (key === "arrowdown") {
     }
-    return null;
+    if (key === "arrowleft") {
+    }
+    if (key === "arrowright") {
+    }
   }
 
   function collapseCaretToNode(node: HTMLElement, position: number) {
@@ -431,6 +424,7 @@ function useEditor() {
     changeCaretPosition,
     collapseCaretToNode,
     getBlockCaretPosition,
+    moveCaretPosition,
     // registerChildren,
   };
 }
@@ -527,4 +521,51 @@ function CommandPrompt2({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
 function assert(value: boolean, message?: string): asserts value {
   if (!value) throw new Error(message);
+}
+
+interface IBlock {
+  id: string;
+  type: string;
+  target: HTMLDivElement | null;
+  children: IBlock[];
+}
+
+class LineBlock implements IBlock {
+  id: string;
+  type: string;
+  target: HTMLDivElement | null;
+  children: IBlock[];
+  editor: BlockEditor;
+
+  constructor(
+    id: string,
+    type: string,
+    target: HTMLDivElement | null,
+    children: IBlock[],
+    editor: BlockEditor,
+  ) {
+    this.id = id;
+    this.type = type;
+    this.target = target;
+    this.children = children;
+    this.editor = editor;
+  }
+}
+
+class BlockEditor {
+  blocks: IBlock[] = [];
+  eventTarget = new EventTarget();
+
+  addBlock() {
+    const block = new LineBlock(crypto.randomUUID(), "block", null, [], this);
+    this.blocks.push(block);
+    this.eventTarget.dispatchEvent(new CustomEvent("add-block", { detail: { block } }));
+    return block;
+  }
+
+  on(eventName: "add-block", callback: (block: Event) => void) {
+    this.eventTarget.addEventListener(eventName, (event) => {
+      callback(event);
+    });
+  }
 }
