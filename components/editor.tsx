@@ -24,7 +24,6 @@ export function Editor() {
           if (!lastBlock || lastBlock.target?.textContent) {
             const newBlock = editor.addBlock();
             editor.focusBlock(newBlock);
-            // editor.updateCaretPosition(newBlock);
           }
         }}
         className={"min-h-full border cursor-text"}
@@ -56,63 +55,13 @@ export function Block({ editor, block }: BlockProps) {
           contentEditable
           suppressContentEditableWarning
           onKeyDown={(event) => {
-            assert(!!block.target, "No dom node associate with this block: " + block.id);
             const key = event.key.toLowerCase();
             if (!event.shiftKey && key === "enter") {
-              event.preventDefault();
-              if (editor.commandPromptState.open) {
-                const inlineOption = editor.insertInlineOption(block);
-                const selection = document.getSelection();
-                assert(!!selection, "selection is null");
-                editor.closeCommandPrompt();
-                const inlineOption1 = inlineOption.children[0];
-                assert(
-                  !!inlineOption1.target,
-                  "No dom node associate with this block: " + block.id,
-                );
-                editor.collapseCaretToNode(inlineOption1.target, 0);
-                return;
-              }
               const newBlock = editor.addBlockAfter(block);
               editor.focusBlock(newBlock);
             }
-            if (key === "arrowup") {
-              event.preventDefault();
-              editor.moveCaretPosition("up", -1);
-            }
-            if (key === "arrowdown") {
-              event.preventDefault();
-              editor.moveCaretPosition("down", 1);
-            }
-            if (key === "arrowleft") {
-              event.preventDefault();
-              editor.moveCaretPosition("left", -1);
-            }
-            if (key === "arrowright") {
-              event.preventDefault();
-              editor.moveCaretPosition("right", 1);
-            }
-            if (
-              key !== "arrowup" &&
-              key !== "arrowdown" &&
-              key !== "arrowleft" &&
-              key !== "arrowright"
-            ) {
-              editor.resetIntentCaret();
-            }
-            if (key === "/") {
-              event.preventDefault();
-              const span = document.createElement("span");
-              span.textContent = "/";
-              block.target.append(span);
-              editor.openCommandPrompt(block, span);
-            }
-            if (key === "tab") {
-              event.preventDefault();
-              const index = editor.blocks.findIndex((b) => b === block);
-              const previousBlock = editor.blocks[index - 1];
-              if (!previousBlock) return;
-              editor.changeBlockParent(block, previousBlock);
+            if (!event.shiftKey && key === "tab") {
+              editor.indentBlock(block, 1);
             }
           }}
           onKeyUp={() => editor.updateCaretPosition(block)}
@@ -120,26 +69,26 @@ export function Block({ editor, block }: BlockProps) {
           className={"w-full flex items-center"}
         >
           {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
-          {block.children.map((child) => {
-            if (child.type === "inline-option") {
+          {block.inlineChildren.map((child) => {
+            if (isInlineOption(child)) {
               return (
                 <React.Fragment key={child.id}>
                   <div className={"inline-option flex items-center"}>
                     <div
-                      ref={editor.registerBlock(child.children[0])}
-                      key={child.children[0].id}
+                      ref={editor.registerBlock(child.inlineChildren[0])}
+                      key={child.inlineChildren[0].id}
                       contentEditable
                       suppressContentEditableWarning
                       className={"px-1 min-h-6 bg-red-200"}
                     />
                   </div>
                   <div
-                    ref={editor.registerBlock(child.children[1])}
-                    key={child.children[1].id}
+                    ref={editor.registerBlock(child.inlineChildren[0])}
+                    key={child.inlineChildren[0].id}
                     contentEditable
                     suppressContentEditableWarning
                     className={"px-1 min-h-6 bg-green-200"}
-                  />
+                  ></div>
                 </React.Fragment>
               );
             }
@@ -197,6 +146,7 @@ function useEditor() {
       id: crypto.randomUUID(),
       type: "block",
       children: [],
+      inlineChildren: [],
       caretPos: 0,
       target: null,
     };
@@ -210,18 +160,19 @@ function useEditor() {
     return newBlock;
   }
 
-  function addBlockAfter(block: IBlock) {
-    const index = blocksRef.current.findIndex((b) => b.id === block.id);
+  function addBlockAfter(block: LineBlock) {
     const newBlock: LineBlock = {
       id: crypto.randomUUID(),
       type: "block",
       children: [],
+      inlineChildren: [],
       caretPos: 0,
       target: null,
     };
-    blocksRef.current.splice(index + 1, 0, newBlock);
+    const parent = block.parent ? block.parent.children : blocksRef.current;
+    const index = parent.findIndex((b) => b.id === block.id);
+    parent.splice(index + 1, 0, newBlock);
     flushSync(() => setRender((prev) => !prev));
-    newBlock.caretPos = getBlockCaretPosition(newBlock);
     return newBlock;
   }
 
@@ -294,36 +245,7 @@ function useEditor() {
     }
   }
 
-  function insertInlineOption(block: IBlock) {
-    const inlineOption: InlineBlock = {
-      id: crypto.randomUUID(),
-      type: "inline-option",
-      children: [],
-      parent: block,
-      target: null,
-    };
-    const inlineOption1: InlineBlock = {
-      id: crypto.randomUUID(),
-      type: "inline-option-1",
-      children: [],
-      parent: inlineOption,
-      target: null,
-    };
-    const inlineOption2: InlineBlock = {
-      id: crypto.randomUUID(),
-      type: "inline-option-2",
-      children: [],
-      parent: inlineOption,
-      target: null,
-    };
-    inlineOption.children = [inlineOption1, inlineOption2];
-
-    block.children.push(inlineOption);
-
-    flushSync(() => setRender((prev) => !prev));
-
-    return inlineOption;
-  }
+  function insertInlineOption(block: IBlock) {}
 
   function getBlockFromNode(node: HTMLElement | Node) {}
 
@@ -358,13 +280,11 @@ function useEditor() {
   function changeCaretPosition(block: IBlock, position: number) {
     assert(!!block.target, "No dom node associate with this block: " + block.id);
     const result = a(block.target, 0);
-    console.log(position, result);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (position >= item[1] && position <= item[2]) {
           const selection = document.getSelection();
           assert(!!selection, "no selection");
-          console.log(item[0], position - item[1]);
           selection.collapse(item[0], position - item[1]);
           return;
         }
@@ -378,44 +298,12 @@ function useEditor() {
     // selection.collapse(lastNode[0], lastNode[0].textContent.length);
   }
 
-  function moveCaretPosition(direction: "up" | "down" | "left" | "right", offset: number) {
-    if (direction === "up" || direction === "down") {
-      const currentBlockIdx = blocksRef.current.findIndex(
-        (b) => document.activeElement === b.target,
-      );
-      const from = blocksRef.current[currentBlockIdx];
-      const to = blocksRef.current[currentBlockIdx + offset];
-      console.log({ currentBlockIdx, from, to });
-      if (!to) return;
-      assert(!!from.target, "No dom node associate with this block: " + from.id);
-      assert(!!to.target, "No dom node associate with this block: " + to.id);
-      const fromCaret = getBlockCaretPosition(from);
-      const toTextLen = to.target.textContent?.length ?? 0;
-      console.log({ fromCaret, toTextLen, intent: intentCaret.current });
-      if (fromCaret > toTextLen && !intentCaret.current) {
-        intentCaret.current = from.caretPos;
-        focusBlock(to);
-        changeCaretPosition(to, toTextLen);
-        return;
-      }
-      if (intentCaret.current) {
-        focusBlock(to);
-        changeCaretPosition(to, Math.min(intentCaret.current, toTextLen));
-        return;
-      }
-      const caretPos = getBlockCaretPosition(from);
-      focusBlock(to);
-      changeCaretPosition(to, caretPos);
-    }
-    if (direction === "left" || direction === "right") {
-      if (intentCaret.current) intentCaret.current = undefined;
-      const currentBlockIdx = blocksRef.current.findIndex(
-        (b) => document.activeElement === b.target,
-      );
-      const from = blocksRef.current[currentBlockIdx];
-      changeCaretPosition(from, getBlockCaretPosition(from) + offset);
-    }
+  function moveCaretToSibling(block: LineBlock, offset: number) {
+    const parent = block.parent ? block.parent.children : blocksRef.current;
+    const blockIndex = parent.findIndex((b) => b.id === block.id);
   }
+
+  function moveCaretPosition(direction: "up" | "down" | "left" | "right", offset: number) {}
 
   function resetIntentCaret() {
     intentCaret.current = undefined;
@@ -448,16 +336,33 @@ function useEditor() {
   function changeBlockParent(block: LineBlock, newParent: LineBlock) {
     if (block.parent) {
       const index = block.parent.children.findIndex((b) => b === block);
+      console.log({ block, index, newParent });
       block.parent.children.splice(index, 1);
     } else {
       const index = blocksRef.current.findIndex((b) => b === block);
       blocksRef.current.splice(index, 1);
     }
-    console.log({ newParent, block });
     newParent.children.push(block);
     block.parent = newParent;
     flushSync(() => setRender((prev) => !prev));
     return block;
+  }
+
+  function indentBlock(block: LineBlock, offset: number) {
+    if (offset === 1) {
+      const parent = block.parent ? block.parent.children : blocksRef.current;
+      const index = parent.findIndex((b) => b.id === block.id);
+      const previousBlock = parent[index - 1];
+      if (!previousBlock) return;
+      block.parent = previousBlock;
+      previousBlock.children.push(block);
+    } else {
+      if (!block.parent) return;
+      const parent = block.parent.parent ? block.parent.parent.children : blocksRef.current;
+      const index = parent.findIndex((b) => b.id === block.parent!.id);
+      parent.splice(index + 1, 0, block);
+      block.parent = block.parent.parent;
+    }
   }
 
   return {
@@ -481,6 +386,7 @@ function useEditor() {
     moveCaretPosition,
     resetIntentCaret,
     changeBlockParent,
+    indentBlock,
     // registerChildren,
   };
 }
@@ -583,14 +489,28 @@ interface IBlock {
   id: string;
   type: string;
   target: HTMLDivElement | null;
-  children: IBlock[];
 }
 
 interface LineBlock extends IBlock {
   caretPos: number;
   parent?: LineBlock;
+  inlineChildren: IBlock[];
+  children: LineBlock[];
 }
 
 interface InlineBlock extends IBlock {
   parent: IBlock;
+  inlineChildren: InlineBlock[];
+}
+
+interface TextBlock extends IBlock {
+  textContent?: string;
+}
+
+function isLineBlock(block: IBlock): block is LineBlock {
+  return block.type === "block";
+}
+
+function isInlineOption(block: IBlock): block is InlineBlock {
+  return block.type === "inline-option";
 }
