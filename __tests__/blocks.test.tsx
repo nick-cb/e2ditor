@@ -4,53 +4,60 @@ interface IBlock {
   id: string;
   type: string;
   target: HTMLDivElement | null;
+  next: IBlock | null;
+  prev: IBlock | null;
 }
 
-interface ILineBlock extends IBlock {
-  children: BlockList;
-  next: ILineBlock | null;
-  prev: ILineBlock | null;
-}
-
-class LineBlock implements ILineBlock {
+class InlineBlock implements IBlock {
   id = crypto.randomUUID();
-  type = "block";
-  children = createBlockList();
-  inlineChildren = createBlockList();
   constructor(
+    public type: string,
     public target: HTMLDivElement | null,
-    public next: ILineBlock | null,
-    public prev: ILineBlock | null,
+    public next: IBlock | null,
+    public prev: IBlock | null,
   ) {}
 }
 
-interface BlockList {
-  _root: ILineBlock | null;
-  _tail: ILineBlock | null;
-  addBlockToEnd(block: ILineBlock): ILineBlock;
-  addBlockToStart(block: ILineBlock): ILineBlock;
-  insertBlockAfter(block: ILineBlock, newBlock: ILineBlock): ILineBlock;
-  insertBlockBefore(block: ILineBlock, newBlock: ILineBlock): ILineBlock;
-  deleteBlock(block: ILineBlock): ILineBlock;
-  [Symbol.iterator](): Generator<ILineBlock, void, unknown>;
+class LineBlock implements IBlock {
+  id = crypto.randomUUID();
+  type = "block";
+  children = createBlockList<LineBlock>();
+  inlineChildren = createBlockList<InlineBlock>();
+  constructor(
+    public target: HTMLDivElement | null,
+    public next: LineBlock | null,
+    public prev: LineBlock | null,
+  ) {}
+}
+
+interface BlockList<Block extends IBlock> {
+  _root: Block | null;
+  _tail: Block | null;
+  addBlockToEnd(block: Block): Block;
+  addBlockToStart(block: Block): Block;
+  insertBlockAfter(block: Block, newBlock: Block): Block;
+  insertBlockBefore(block: Block, newBlock: Block): Block;
+  deleteBlock(block: Block): Block;
+  [Symbol.iterator](): Generator<Block, void, unknown>;
 }
 
 function assert(value: boolean, message?: string): asserts value {
   if (!value) throw new Error(message);
 }
 
-function createBlockList() {
-  const blocks: BlockList = {
-    _root: null as ILineBlock | null,
-    _tail: null as ILineBlock | null,
+function createBlockList<Block extends IBlock>() {
+  const blocks: BlockList<Block> = {
+    _root: null,
+    _tail: null,
     *[Symbol.iterator]() {
       let block = this._root;
       while (block) {
         yield block;
+        // @ts-ignore@ts-ignore
         block = block.next;
       }
     },
-    addBlockToEnd(block: ILineBlock) {
+    addBlockToEnd(block) {
       if (!this._root) {
         this._root = block;
         this._tail = block;
@@ -63,7 +70,7 @@ function createBlockList() {
       }
       return block;
     },
-    addBlockToStart(block: ILineBlock) {
+    addBlockToStart(block) {
       if (!this._tail) this._tail = block;
       if (!this._root) {
         this._root = block;
@@ -76,7 +83,7 @@ function createBlockList() {
       }
       return block;
     },
-    insertBlockAfter(block: ILineBlock, newBlock: ILineBlock) {
+    insertBlockAfter(block, newBlock) {
       assert(block !== newBlock, "cannot be the same block");
       const next = block.next;
       if (next) next.prev = newBlock;
@@ -86,7 +93,7 @@ function createBlockList() {
       newBlock.prev = block;
       return block;
     },
-    insertBlockBefore(block: ILineBlock, newBlock: ILineBlock) {
+    insertBlockBefore(block, newBlock) {
       assert(block !== newBlock, "cannot be the same block");
       if (block === newBlock) return block;
       let prev = block.prev;
@@ -97,12 +104,14 @@ function createBlockList() {
       block.prev = newBlock;
       return block;
     },
-    deleteBlock(block: ILineBlock) {
+    deleteBlock(block) {
       const prev = block.prev;
       const next = block.next;
       if (prev) prev.next = next;
       if (next) next.prev = prev;
+      // @ts-ignore@ts-ignore
       if (block === this._tail) this._tail = prev;
+      // @ts-ignore@ts-ignore
       if (block === this._root) this._root = next;
       return block;
     },
@@ -112,7 +121,7 @@ function createBlockList() {
 }
 
 function createEditor() {
-  return { blocks: createBlockList() };
+  return { blocks: createBlockList<LineBlock>() };
 }
 
 test("editor be able to add new item to the end of the list", () => {
