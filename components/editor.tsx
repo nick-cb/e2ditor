@@ -20,20 +20,31 @@ export function Editor() {
       <div
         onClick={(event) => {
           if (event.currentTarget !== event.target) return;
-          const lastBlock = editor.blocks.at(-1);
-          if (!lastBlock || lastBlock.target?.textContent) {
+          const lastBlock = Array.from(editor.blocks).at(-1);
+          console.log({ lastBlock });
+          if (!lastBlock) {
             const newBlock = editor.addBlock();
-            editor.focusBlock(newBlock);
+            assert(!!newBlock.target, "no dom node: " + newBlock.id);
+            newBlock.target.focus();
+            return;
+          }
+
+          assert(!!lastBlock.target, "no dom node: " + lastBlock.id);
+          console.log({ length: lastBlock.target.textContent?.length });
+          if (lastBlock.target.textContent?.length) {
+            const newBlock = editor.addBlock(lastBlock);
+            assert(!!newBlock.target, "no dom node: " + newBlock.id);
+            newBlock.target.focus();
           }
         }}
         className={"min-h-full border cursor-text"}
       >
-        {editor.blocks.map((block) => {
+        {Array.from(editor.blocks).map((block) => {
           return <Block key={block.id} editor={editor} block={block as LineBlock} />;
         })}
         {/* <CommandPrompt editor={editor} /> */}
       </div>
-      <CommandPrompt2 editor={editor} />
+      {/* <CommandPrompt2 editor={editor} /> */}
     </div>
   );
 }
@@ -57,54 +68,58 @@ export function Block({ editor, block }: BlockProps) {
           onKeyDown={(event) => {
             const key = event.key.toLowerCase();
             if (!event.shiftKey && key === "enter") {
-              const newBlock = editor.addBlockAfter(block);
-              editor.focusBlock(newBlock);
+              const newBlock = editor.addBlock(block);
+              assert(!!newBlock.target, "no dom node: " + newBlock.id);
+              newBlock.target.focus();
+              // block.next =
             }
             if (!event.shiftKey && key === "tab") {
-              editor.indentBlock(block, 1);
+              const prev = block.prev;
+              if (!prev) return;
+              // if (!prev.children) prev.children = block;
             }
           }}
-          onKeyUp={() => editor.updateCaretPosition(block)}
-          onClick={() => editor.updateCaretPosition(block)}
+          // onKeyUp={() => editor.updateCaretPosition(block)}
+          // onClick={() => editor.updateCaretPosition(block)}
           className={"w-full flex items-center"}
         >
           {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
-          {block.inlineChildren.map((child) => {
-            if (isInlineOption(child)) {
-              return (
-                <React.Fragment key={child.id}>
-                  <div className={"inline-option flex items-center"}>
-                    <div
-                      ref={editor.registerBlock(child.inlineChildren[0])}
-                      key={child.inlineChildren[0].id}
-                      contentEditable
-                      suppressContentEditableWarning
-                      className={"px-1 min-h-6 bg-red-200"}
-                    />
-                  </div>
-                  <div
-                    ref={editor.registerBlock(child.inlineChildren[0])}
-                    key={child.inlineChildren[0].id}
-                    contentEditable
-                    suppressContentEditableWarning
-                    className={"px-1 min-h-6 bg-green-200"}
-                  ></div>
-                </React.Fragment>
-              );
-            }
-            return null;
-          })}
+          {/* {block.inlineChildren.map((child) => { */}
+          {/*   if (isInlineOption(child)) { */}
+          {/*     return ( */}
+          {/*       <React.Fragment key={child.id}> */}
+          {/*         <div className={"inline-option flex items-center"}> */}
+          {/*           <div */}
+          {/*             // ref={editor.registerBlock(child.inlineChildren[0])} */}
+          {/*             key={child.inlineChildren[0].id} */}
+          {/*             contentEditable */}
+          {/*             suppressContentEditableWarning */}
+          {/*             className={"px-1 min-h-6 bg-red-200"} */}
+          {/*           /> */}
+          {/*         </div> */}
+          {/*         <div */}
+          {/*           // ref={editor.registerBlock(child.inlineChildren[0])} */}
+          {/*           key={child.inlineChildren[0].id} */}
+          {/*           contentEditable */}
+          {/*           suppressContentEditableWarning */}
+          {/*           className={"px-1 min-h-6 bg-green-200"} */}
+          {/*         ></div> */}
+          {/*       </React.Fragment> */}
+          {/*     ); */}
+          {/*   } */}
+          {/*   return null; */}
+          {/* })} */}
         </div>
       </div>
-      {block.children.map((child) => {
-        if (child.type === "block") {
-          return (
-            <div key={child.id} className={"pl-4"}>
-              <Block editor={editor} block={child as LineBlock} />
-            </div>
-          );
-        }
-      })}
+      {/* {block.children.map((child) => { */}
+      {/*   if (child.type === "block") { */}
+      {/*     return ( */}
+      {/*       <div key={child.id} className={"pl-4"}> */}
+      {/*         <Block editor={editor} block={child as LineBlock} /> */}
+      {/*       </div> */}
+      {/*     ); */}
+      {/*   } */}
+      {/* })} */}
     </div>
   );
 }
@@ -121,274 +136,65 @@ type CommandPromptState = {
   left: number;
 };
 function useEditor() {
-  const intentCaret = useRef<number | undefined>(undefined);
-  const blockMapRef = useRef<Map<HTMLElement, IBlock>>(new Map());
-  const blocksRef = useRef<LineBlock[]>([]);
-  const [_, setRender] = useState(false);
-  const [commandPromptState, setCommandPromptState] = useState<CommandPromptState>({
-    block: null,
-    anchor: null,
-    open: false,
-    left: 0,
-    top: 0,
+  const [render, setRender] = useState(false);
+  const rootRef = useRef<LineBlock | null>(null);
+  const blockRef = useRef({
+    *[Symbol.iterator]() {
+      let block = rootRef.current;
+      while (block) {
+        yield block;
+        block = block.next;
+      }
+    },
   });
 
-  function focusBlock(block: IBlock) {
-    assert(!!block, "no block found");
-    assert(!!block.target, "No dom node associate with this block: " + block.id);
-
-    block.target.focus();
-  }
-
-  // NOTE: Should addBlock control more of the behaviors, eg: content, text, child node, selection?
-  function addBlock(parent?: LineBlock) {
+  function addBlock(block?: LineBlock) {
+    const children = {
+      _blocks: null as LineBlock | null,
+      *[Symbol.iterator]() {
+        let block = this._blocks;
+        while (block) {
+          yield block;
+          block = block.next;
+        }
+      },
+    };
     const newBlock: LineBlock = {
       id: crypto.randomUUID(),
       type: "block",
-      children: [],
-      inlineChildren: [],
-      caretPos: 0,
+      next: null,
+      parent: null,
+      prev: null,
+      children: children,
+      inlineChildren: null,
       target: null,
+      caretPos: 0,
     };
-    if (parent) {
-      parent.children.push(newBlock);
-    } else {
-      blocksRef.current.push(newBlock);
+
+    if (!rootRef.current) {
+      rootRef.current = newBlock;
     }
+
+    if (block) {
+      block.next = newBlock;
+      newBlock.prev = block;
+    }
+
     flushSync(() => setRender((prev) => !prev));
-    newBlock.caretPos = getBlockCaretPosition(newBlock);
+
     return newBlock;
   }
 
-  function addBlockAfter(block: LineBlock) {
-    const newBlock: LineBlock = {
-      id: crypto.randomUUID(),
-      type: "block",
-      children: [],
-      inlineChildren: [],
-      caretPos: 0,
-      target: null,
-    };
-    const parent = block.parent ? block.parent.children : blocksRef.current;
-    const index = parent.findIndex((b) => b.id === block.id);
-    parent.splice(index + 1, 0, newBlock);
-    flushSync(() => setRender((prev) => !prev));
-    return newBlock;
-  }
-
-  function deleteBlock(block: IBlock) {}
-
-  const registerBlock = useCallback((block: IBlock) => {
+  function registerBlock(block: LineBlock) {
     return (current: HTMLDivElement) => {
       block.target = current;
-      if (current) blockMapRef.current.set(current, block);
-      // if (current)
-      //   observer.observe(current, { characterData: true, subtree: true, childList: true });
-      // return () => {
-      //   if (current) blockMapRef.current.delete(current);
-      // };
+      return () => {
+        block.target = current;
+      };
     };
-  }, []);
-
-  // const registerChildren = useCallback((id: string, childId: string) => {
-  //   return (current: HTMLElement) => {
-  //     const block = blocksRef.current.find((b) => b.id === id);
-  //     if (!block) return;
-  //     const children = block.children.find((c) => c.id === childId);
-  //     // if (!children.contents) children.contents = new Set();
-  //     // if (children) children.contents.add(current);
-  //   };
-  // }, []);
-
-  function openCommandPrompt(block: IBlock, anchor: HTMLElement) {
-    // assert(!!block.el, "No dom node associate with this block: " + block.id);
-    const elementRect = anchor.getBoundingClientRect();
-    const selection = document.getSelection();
-    assert(!!selection, "no selection");
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-
-    flushSync(() =>
-      setCommandPromptState({
-        block,
-        anchor,
-        open: true,
-        left: rect.left,
-        top: rect.top + elementRect.height,
-      }),
-    );
-    selection.collapse(anchor.childNodes[0], 1);
   }
 
-  function closeCommandPrompt() {
-    const block = commandPromptState.block;
-    if (!block || !commandPromptState.anchor) return;
-    assert(!!block.target, "No dom node associate with this block: " + block.id);
-    block.target.removeChild(commandPromptState.anchor);
-    setCommandPromptState((prev) => ({ ...prev, open: false }));
-  }
-
-  function updateCaretPosition(block: LineBlock) {
-    assert(!!block.target, "No dom node associate with this block: " + block.id);
-    const selection = document.getSelection();
-    assert(!!selection, "no selection");
-    const endNode = selection.focusNode;
-    const endOffset = selection.focusOffset;
-    const result = a(block.target, 0);
-    for (const item of result) {
-      if (item[0] instanceof Node) {
-        if (item[0] === endNode) {
-          block.caretPos = item[1] + endOffset;
-          setRender((prev) => !prev);
-        }
-      }
-    }
-  }
-
-  function insertInlineOption(block: IBlock) {}
-
-  function getBlockFromNode(node: HTMLElement | Node) {}
-
-  function deleteBlockFromParent(parent: IBlock, block: IBlock) {}
-
-  function a(node: Node, startOffSet: number): any[] {
-    let result = [];
-    for (const childNode of node.childNodes) {
-      if (childNode.nodeType === 3) {
-        result.push([childNode, startOffSet, (startOffSet += childNode.textContent?.length ?? 0)]);
-      } else {
-        result.push(...a(childNode, startOffSet));
-        const last = result.at(-1);
-        if (last) {
-          startOffSet = last[2];
-        }
-      }
-      startOffSet += 1;
-    }
-    if (!node.childNodes.length) {
-      result.push([node, startOffSet, startOffSet + 1]);
-    }
-
-    return result;
-  }
-
-  // - if caret go from a line with longer text to a line with fewer text, the caret position
-  // will go to the position of the longer text
-  // - if caret go from aline with fewer text to a line with longer text, the caret position
-  // will go to the previous position of the longer text if the position of the fewer text
-  // is different with the position of the longer text
-  function changeCaretPosition(block: IBlock, position: number) {
-    assert(!!block.target, "No dom node associate with this block: " + block.id);
-    const result = a(block.target, 0);
-    for (const item of result) {
-      if (item[0] instanceof Node) {
-        if (position >= item[1] && position <= item[2]) {
-          const selection = document.getSelection();
-          assert(!!selection, "no selection");
-          selection.collapse(item[0], position - item[1]);
-          return;
-        }
-      }
-    }
-
-    // const lastNode = result.at(-1);
-    // if (!lastNode) return;
-    // const selection = document.getSelection();
-    // assert(!!selection, "no selection");
-    // selection.collapse(lastNode[0], lastNode[0].textContent.length);
-  }
-
-  function moveCaretToSibling(block: LineBlock, offset: number) {
-    const parent = block.parent ? block.parent.children : blocksRef.current;
-    const blockIndex = parent.findIndex((b) => b.id === block.id);
-  }
-
-  function moveCaretPosition(direction: "up" | "down" | "left" | "right", offset: number) {}
-
-  function resetIntentCaret() {
-    intentCaret.current = undefined;
-  }
-
-  function getBlockCaretPosition(block: IBlock) {
-    assert(!!block.target, "No dom node associate with this block: " + block.id);
-    const selection = document.getSelection();
-    assert(!!selection, "no selection");
-    const endNode = selection.focusNode;
-    const endOffset = selection.focusOffset;
-    const result = a(block.target, 0);
-    for (const item of result) {
-      if (item[0] instanceof Node) {
-        if (item[0] === endNode) {
-          return item[1] + endOffset;
-        }
-      }
-    }
-
-    return 0;
-  }
-
-  function collapseCaretToNode(node: HTMLElement, position: number) {
-    const selection = document.getSelection();
-    assert(!!selection, "no selection");
-    selection.collapse(node, position);
-  }
-
-  function changeBlockParent(block: LineBlock, newParent: LineBlock) {
-    if (block.parent) {
-      const index = block.parent.children.findIndex((b) => b === block);
-      console.log({ block, index, newParent });
-      block.parent.children.splice(index, 1);
-    } else {
-      const index = blocksRef.current.findIndex((b) => b === block);
-      blocksRef.current.splice(index, 1);
-    }
-    newParent.children.push(block);
-    block.parent = newParent;
-    flushSync(() => setRender((prev) => !prev));
-    return block;
-  }
-
-  function indentBlock(block: LineBlock, offset: number) {
-    if (offset === 1) {
-      const parent = block.parent ? block.parent.children : blocksRef.current;
-      const index = parent.findIndex((b) => b.id === block.id);
-      const previousBlock = parent[index - 1];
-      if (!previousBlock) return;
-      block.parent = previousBlock;
-      previousBlock.children.push(block);
-    } else {
-      if (!block.parent) return;
-      const parent = block.parent.parent ? block.parent.parent.children : blocksRef.current;
-      const index = parent.findIndex((b) => b.id === block.parent!.id);
-      parent.splice(index + 1, 0, block);
-      block.parent = block.parent.parent;
-    }
-  }
-
-  return {
-    blocks: blocksRef.current,
-    blockMap: blockMapRef.current,
-    commandPromptState,
-    focusBlock,
-    addBlock,
-    addBlockAfter,
-    registerBlock,
-    deleteBlock,
-    openCommandPrompt,
-    updateCaretPosition,
-    closeCommandPrompt,
-    insertInlineOption,
-    getBlockFromNode,
-    deleteBlockFromParent,
-    changeCaretPosition,
-    collapseCaretToNode,
-    getBlockCaretPosition,
-    moveCaretPosition,
-    resetIntentCaret,
-    changeBlockParent,
-    indentBlock,
-    // registerChildren,
-  };
+  return { blocks: blockRef.current, addBlock, registerBlock };
 }
 
 function composeEventHandlers<E>(
@@ -403,34 +209,6 @@ function composeEventHandlers<E>(
       return ourEventHandler?.(event);
     }
   };
-}
-
-function CommandPrompt({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  const commandPromptState = editor.commandPromptState;
-
-  return (
-    <DropdownMenu open={commandPromptState.open}>
-      {createPortal(
-        <DropdownMenuTrigger
-          className={"fixed"}
-          style={{ left: commandPromptState.left, top: commandPromptState.top }}
-        ></DropdownMenuTrigger>,
-        document.body,
-      )}
-      <DropdownMenuContent
-        onEscapeKeyDown={editor.closeCommandPrompt}
-        onInteractOutside={editor.closeCommandPrompt}
-        onFocusOutside={editor.closeCommandPrompt}
-      >
-        <DropdownMenuLabel>My Account</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem>Profile</DropdownMenuItem>
-        <DropdownMenuItem>Billing</DropdownMenuItem>
-        <DropdownMenuItem>Team</DropdownMenuItem>
-        <DropdownMenuItem>Subscription</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 function CommandPrompt2({ editor }: { editor: ReturnType<typeof useEditor> }) {
@@ -493,9 +271,14 @@ interface IBlock {
 
 interface LineBlock extends IBlock {
   caretPos: number;
-  parent?: LineBlock;
-  inlineChildren: IBlock[];
-  children: LineBlock[];
+  parent: LineBlock | null;
+  inlineChildren: IBlock | null;
+  children: {
+    _blocks: LineBlock | null;
+    [Symbol.iterator](): Generator<LineBlock, void, unknown>;
+  };
+  next: LineBlock | null;
+  prev: LineBlock | null;
 }
 
 interface InlineBlock extends IBlock {
