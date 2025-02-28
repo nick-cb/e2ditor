@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
   DropdownMenu,
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { createBlockList, LineBlock, RootBlock } from "./block";
 
 export function Editor() {
   const editor = useEditor();
@@ -20,26 +21,20 @@ export function Editor() {
       <div
         onClick={(event) => {
           if (event.currentTarget !== event.target) return;
-          const lastBlock = Array.from(editor.blocks).at(-1);
-          console.log({ lastBlock });
-          if (!lastBlock) {
-            const newBlock = editor.addBlock();
-            assert(!!newBlock.target, "no dom node: " + newBlock.id);
-            newBlock.target.focus();
+          const block = editor.blocks.children.createBlock("block");
+          const lastBlock = editor.blocks.children.getLastBlock();
+          if (!lastBlock || (lastBlock.target && !!lastBlock.target.textContent)) {
+            editor.blocks.children.addBlockToEnd(block);
+            assert(!!block.target, "no dom node: " + block.id);
+            block.target.focus();
             return;
           }
-
           assert(!!lastBlock.target, "no dom node: " + lastBlock.id);
-          console.log({ length: lastBlock.target.textContent?.length });
-          if (lastBlock.target.textContent?.length) {
-            const newBlock = editor.addBlock(lastBlock);
-            assert(!!newBlock.target, "no dom node: " + newBlock.id);
-            newBlock.target.focus();
-          }
+          lastBlock.target.focus();
         }}
         className={"min-h-full border cursor-text"}
       >
-        {Array.from(editor.blocks).map((block) => {
+        {Array.from(editor.blocks.children).map((block) => {
           return <Block key={block.id} editor={editor} block={block as LineBlock} />;
         })}
         {/* <CommandPrompt editor={editor} /> */}
@@ -68,15 +63,39 @@ export function Block({ editor, block }: BlockProps) {
           onKeyDown={(event) => {
             const key = event.key.toLowerCase();
             if (!event.shiftKey && key === "enter") {
-              const newBlock = editor.addBlock(block);
+              const parent = block.parent;
+              const newBlock = parent.children.insertBlockAfter(
+                block,
+                parent.children.createBlock("block"),
+              );
               assert(!!newBlock.target, "no dom node: " + newBlock.id);
               newBlock.target.focus();
-              // block.next =
             }
             if (!event.shiftKey && key === "tab") {
               const prev = block.prev;
               if (!prev) return;
-              // if (!prev.children) prev.children = block;
+              editor.blocks.deleteBlock(block);
+              prev.children.addBlockToEnd(block);
+              editor.rerender();
+              assert(!!block.target, "no dom node: " + block.id);
+              block.target.focus();
+              debugger;
+            }
+            if (event.shiftKey && key === "tab") {
+              event.preventDefault();
+              if (!block.parent) return;
+              let nextBlock = block.next;
+              while (nextBlock) {
+                block.parent.children.deleteBlock(nextBlock);
+                block.children.addBlockToEnd(nextBlock);
+                nextBlock = nextBlock.next;
+              }
+              debugger;
+              block.parent.children.deleteBlock(block);
+              const parent = block.parent.parent ? block.parent.parent.children : editor.blocks;
+              parent.insertBlockAfter(block, block.parent);
+              assert(!!block.target, "no dom node: " + block.id);
+              block.target.focus();
             }
           }}
           // onKeyUp={() => editor.updateCaretPosition(block)}
@@ -111,15 +130,13 @@ export function Block({ editor, block }: BlockProps) {
           {/* })} */}
         </div>
       </div>
-      {/* {block.children.map((child) => { */}
-      {/*   if (child.type === "block") { */}
-      {/*     return ( */}
-      {/*       <div key={child.id} className={"pl-4"}> */}
-      {/*         <Block editor={editor} block={child as LineBlock} /> */}
-      {/*       </div> */}
-      {/*     ); */}
-      {/*   } */}
-      {/* })} */}
+      {Array.from(block.children).map((child) => {
+        return (
+          <div key={child.id} className={"pl-4"}>
+            <Block editor={editor} block={child as LineBlock} />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -137,53 +154,44 @@ type CommandPromptState = {
 };
 function useEditor() {
   const [render, setRender] = useState(false);
-  const rootRef = useRef<LineBlock | null>(null);
-  const blockRef = useRef({
-    *[Symbol.iterator]() {
-      let block = rootRef.current;
-      while (block) {
-        yield block;
-        block = block.next;
-      }
-    },
-  });
-
-  function addBlock(block?: LineBlock) {
-    const children = {
-      _blocks: null as LineBlock | null,
-      *[Symbol.iterator]() {
-        let block = this._blocks;
-        while (block) {
-          yield block;
-          block = block.next;
-        }
-      },
+  const blockRef = useRef(new RootBlock());
+  // const proxy = useMemo(() => {
+  //   return new Proxy(blockRef.current, {
+  //     get(target, prop, receiver) {
+  //       // @ts-ignore
+  //       const value = target[prop];
+  //       if (value instanceof Function) {
+  //         return function (...args: any[]) {
+  //           // @ts-ignore
+  //           const returns = value.apply(this === receiver ? target : this, args);
+  //           if (
+  //             [
+  //               "addBlockToStart",
+  //               "addBlockToEnd",
+  //               "insertBlockAfter",
+  //               "insertBlockBefore",
+  //               "deleteBlock",
+  //               "getLastBlock",
+  //             ].includes(value.name)
+  //           ) {
+  //             flushSync(() => setRender((prev) => !prev));
+  //           }
+  //           return returns;
+  //         };
+  //       }
+  //       return value;
+  //     },
+  //   });
+  // }, [blockRef.current]);
+  useEffect(() => {
+    if (!blockRef.current) return;
+    const handler = () => {
+      flushSync(() => setRender((prev) => !prev));
     };
-    const newBlock: LineBlock = {
-      id: crypto.randomUUID(),
-      type: "block",
-      next: null,
-      parent: null,
-      prev: null,
-      children: children,
-      inlineChildren: null,
-      target: null,
-      caretPos: 0,
-    };
-
-    if (!rootRef.current) {
-      rootRef.current = newBlock;
-    }
-
-    if (block) {
-      block.next = newBlock;
-      newBlock.prev = block;
-    }
-
-    flushSync(() => setRender((prev) => !prev));
-
-    return newBlock;
-  }
+    blockRef.current.children.on("delete-block", handler);
+    blockRef.current.children.on("add-block-to-end", handler);
+    blockRef.current.children.on("add-block-to-start", handler);
+  }, [blockRef]);
 
   function registerBlock(block: LineBlock) {
     return (current: HTMLDivElement) => {
@@ -194,7 +202,11 @@ function useEditor() {
     };
   }
 
-  return { blocks: blockRef.current, addBlock, registerBlock };
+  function rerender() {
+    flushSync(() => setRender((prev) => !prev));
+  }
+
+  return { blocks: blockRef.current, registerBlock, rerender };
 }
 
 function composeEventHandlers<E>(
@@ -263,37 +275,37 @@ function assert(value: boolean, message?: string): asserts value {
   if (!value) throw new Error(message);
 }
 
-interface IBlock {
-  id: string;
-  type: string;
-  target: HTMLDivElement | null;
-}
+// interface IBlock {
+//   id: string;
+//   type: string;
+//   target: HTMLDivElement | null;
+// }
 
-interface LineBlock extends IBlock {
-  caretPos: number;
-  parent: LineBlock | null;
-  inlineChildren: IBlock | null;
-  children: {
-    _blocks: LineBlock | null;
-    [Symbol.iterator](): Generator<LineBlock, void, unknown>;
-  };
-  next: LineBlock | null;
-  prev: LineBlock | null;
-}
+// interface LineBlock extends IBlock {
+//   caretPos: number;
+//   parent: LineBlock | null;
+//   inlineChildren: IBlock | null;
+//   children: {
+//     _blocks: LineBlock | null;
+//     [Symbol.iterator](): Generator<LineBlock, void, unknown>;
+//   };
+//   next: LineBlock | null;
+//   prev: LineBlock | null;
+// }
 
-interface InlineBlock extends IBlock {
-  parent: IBlock;
-  inlineChildren: InlineBlock[];
-}
+// interface InlineBlock extends IBlock {
+//   parent: IBlock;
+//   inlineChildren: InlineBlock[];
+// }
 
-interface TextBlock extends IBlock {
-  textContent?: string;
-}
+// interface TextBlock extends IBlock {
+//   textContent?: string;
+// }
 
-function isLineBlock(block: IBlock): block is LineBlock {
-  return block.type === "block";
-}
+// function isLineBlock(block: IBlock): block is LineBlock {
+//   return block.type === "block";
+// }
 
-function isInlineOption(block: IBlock): block is InlineBlock {
-  return block.type === "inline-option";
-}
+// function isInlineOption(block: IBlock): block is InlineBlock {
+//   return block.type === "inline-option";
+// }
