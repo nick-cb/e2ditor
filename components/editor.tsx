@@ -104,6 +104,8 @@ export function Block({ editor, block }: BlockProps) {
               block.parent.children.deleteBlock(block);
               const grandParent = block.parent.parent;
               grandParent.children.insertBlockAfter(block.parent, block);
+              assert(!!block.target, 'no dom node: ' + block.id)
+              block.target.focus()
               return;
             }
             if (key === "arrowup") {
@@ -330,7 +332,7 @@ function useEditor() {
       let fromCaret = getBlockCaretPosition(block) + addition;
       const toTextLen = (nextBlock.target.textContent?.length ?? 0) + nextBlockAddition;
       if (fromCaret > toTextLen && !intentCaret.current) {
-        intentCaret.current = fromCaret + addition;
+        intentCaret.current = fromCaret;
         nextBlock.target.focus();
         changeCaretPosition(nextBlock, toTextLen - nextBlockAddition);
         return;
