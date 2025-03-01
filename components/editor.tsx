@@ -12,6 +12,8 @@ import {
 } from "./ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BlockList, createBlockList, IBlock, LineBlock, RootBlock } from "./block";
+import { Button } from "./ui/button";
+import { GripVerticalIcon } from "lucide-react";
 
 export function Editor() {
   const editor = useEditor();
@@ -32,7 +34,7 @@ export function Editor() {
           assert(!!lastBlock.target, "no dom node: " + lastBlock.id);
           lastBlock.target.focus();
         }}
-        className={"min-h-full border cursor-text"}
+        className={"min-h-full cursor-text"}
       >
         {Array.from(editor.blocks.children).map((block) => {
           return <Block key={block.id} editor={editor} block={block as LineBlock} />;
@@ -53,8 +55,16 @@ export function Block({ editor, block }: BlockProps) {
 
   return (
     <div>
-      <div className={"flex gap-2"}>
-        <div>•</div>
+      <div className={"flex relative items-center group"}>
+        <Button
+          size={"sm"}
+          variant={"ghost"}
+          className={
+            "absolute left-0 -translate-x-full !w-max !h-max p-1 group-hover:opacity-100 opacity-0 transition-opacity"
+          }
+        >
+          <GripVerticalIcon />
+        </Button>
         <div
           id={block.id}
           ref={ref}
@@ -138,7 +148,7 @@ export function Block({ editor, block }: BlockProps) {
       </div>
       {Array.from(block.children).map((child) => {
         return (
-          <div key={child.id} className={"pl-4"}>
+          <div key={child.id} className={"pl-[3ch]"}>
             <Block editor={editor} block={child} />
           </div>
         );
@@ -162,6 +172,7 @@ function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
   const mapRef = useRef<Map<HTMLElement, LineBlock>>(new Map());
+  const intentCaret = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!blockRef.current) return;
@@ -198,41 +209,118 @@ function useEditor() {
     flushSync(() => setRender((prev) => !prev));
   }
 
+  function a(node: Node, startOffSet: number): any[] {
+    let result = [];
+    for (const childNode of node.childNodes) {
+      if (childNode.nodeType === 3) {
+        result.push([childNode, startOffSet, (startOffSet += childNode.textContent?.length ?? 0)]);
+      } else {
+        result.push(...a(childNode, startOffSet));
+        const last = result.at(-1);
+        if (last) {
+          startOffSet = last[2];
+        }
+      }
+      startOffSet += 1;
+    }
+    if (!node.childNodes.length) {
+      result.push([node, startOffSet, startOffSet + 1]);
+    }
+
+    return result;
+  }
+
+  function getBlockCaretPosition(block: IBlock) {
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    const endNode = selection.focusNode;
+    const endOffset = selection.focusOffset;
+    const result = a(block.target, 0);
+    for (const item of result) {
+      if (item[0] instanceof Node) {
+        if (item[0] === endNode) {
+          return item[1] + endOffset;
+        }
+      }
+    }
+
+    return 0;
+  }
+
+  function changeCaretPosition(block: LineBlock, position: number) {
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    const result = a(block.target, 0);
+    console.log(position, result);
+    for (const item of result) {
+      if (item[0] instanceof Node) {
+        if (position >= item[1] && position <= item[2]) {
+          const selection = document.getSelection();
+          assert(!!selection, "no selection");
+          console.log(item[0], position - item[1]);
+          selection.collapse(item[0], position - item[1]);
+          return;
+        }
+      }
+    }
+  }
+
   function moveCaret(direction: "up" | "down" | "left" | "right") {
     const element = document.activeElement;
     if (!element || !(element instanceof HTMLElement)) return;
     const block = mapRef.current.get(element);
     if (!block) return;
+
     let nextBlock: LineBlock | null = null;
+    let fromCaret = getBlockCaretPosition(block);
     if (direction === "down") {
       const children = Array.from(block.children);
-      if (children.length) nextBlock = children[0];
-      else if (block.next) nextBlock = block.next;
-      else if (isLineBlock(block.parent)) {
+      if (children.length) {
+        nextBlock = children[0];
+        fromCaret = Math.max(0, fromCaret - 3);
+      } else if (block.next) {
+        nextBlock = block.next;
+      } else if (isLineBlock(block.parent)) {
         let parent: LineBlock | RootBlock = block.parent;
         while (!nextBlock && isLineBlock(parent)) {
           nextBlock = parent.next;
           parent = parent.parent;
+          fromCaret = fromCaret + 3;
         }
       }
     }
     if (direction === "up") {
       if (block.prev && Array.from(block.prev.children).length) {
         let tail = block.prev.children._tail;
+        fromCaret = Math.max(0, fromCaret - 3);
         while (tail && Array.from(tail.children).length) {
-          console.log("b");
           tail = tail.children._tail;
+          fromCaret = Math.max(0, fromCaret - 3);
         }
         if (tail) nextBlock = tail;
       } else if (block.prev) {
         nextBlock = block.prev;
       } else if (isLineBlock(block.parent)) {
         nextBlock = block.parent;
+        fromCaret = fromCaret + 3;
       }
     }
 
     if (nextBlock && nextBlock.target) {
+      const toTextLen = nextBlock.target.textContent?.length ?? 0;
+      console.log({ fromCaret, toTextLen });
+      if (fromCaret > toTextLen && !intentCaret.current) {
+        intentCaret.current = fromCaret;
+        nextBlock.target.focus();
+        changeCaretPosition(nextBlock, toTextLen);
+        return;
+      }
+      if (intentCaret.current) {
+        nextBlock.target.focus();
+        changeCaretPosition(nextBlock, Math.min(intentCaret.current, toTextLen));
+      }
       nextBlock.target.focus();
+      changeCaretPosition(nextBlock, fromCaret);
     }
   }
 

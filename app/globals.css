@@ -75,3 +75,15 @@ body {
   content: '/';
   pointer-events: none;
 }
+
+/* .line-block { */
+/*   display: flex; */
+/*   position: relative; */
+/* } */
+
+/* .line-block::before { */
+/*   content: '🔗'; */
+/*   position: absolute; */
+/*   left: 0; */
+/*   transform: translateX(-100%); */
+/* } */
