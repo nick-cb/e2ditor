@@ -74,13 +74,13 @@ export function Block({ editor, block }: BlockProps) {
             const key = event.key.toLowerCase();
             if (!event.shiftKey && key === "enter") {
               const parent = block.parent;
-              console.log({ parent });
               const newBlock = parent.children.insertBlockAfter(
                 block,
                 parent.children.createBlock("block"),
               );
               assert(!!newBlock.target, "no dom node: " + newBlock.id);
               newBlock.target.focus();
+              return;
             }
             if (!event.shiftKey && key === "tab") {
               const prev = block.prev;
@@ -90,10 +90,10 @@ export function Block({ editor, block }: BlockProps) {
               prev.children.addBlockToEnd(block);
               assert(!!block.target, "no dom node: " + block.id);
               block.target.focus();
+              return;
             }
             if (event.shiftKey && key === "tab") {
               event.preventDefault();
-              console.log(block.parent);
               if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
               while (nextBlock) {
@@ -104,15 +104,27 @@ export function Block({ editor, block }: BlockProps) {
               block.parent.children.deleteBlock(block);
               const grandParent = block.parent.parent;
               grandParent.children.insertBlockAfter(block.parent, block);
+              return;
             }
             if (key === "arrowup") {
               event.preventDefault();
               editor.moveCaret("up");
+              return;
             }
             if (key === "arrowdown") {
               event.preventDefault();
               editor.moveCaret("down");
+              return;
             }
+            if (key === "arrowleft") {
+              editor.moveCaret("left");
+              return;
+            }
+            if (key === "arrowright") {
+              editor.moveCaret("right");
+              return;
+            }
+            editor.resetIntentCaret();
           }}
           // onKeyUp={() => editor.updateCaretPosition(block)}
           // onClick={() => editor.updateCaretPosition(block)}
@@ -214,6 +226,7 @@ function useEditor() {
     for (const childNode of node.childNodes) {
       if (childNode.nodeType === 3) {
         result.push([childNode, startOffSet, (startOffSet += childNode.textContent?.length ?? 0)]);
+        startOffSet += 1;
       } else {
         result.push(...a(childNode, startOffSet));
         const last = result.at(-1);
@@ -221,11 +234,10 @@ function useEditor() {
           startOffSet = last[2];
         }
       }
-      startOffSet += 1;
     }
-    if (!node.childNodes.length) {
-      result.push([node, startOffSet, startOffSet + 1]);
-    }
+    // if (!node.childNodes.length) {
+    //   result.push([node, startOffSet, startOffSet + 1]);
+    // }
 
     return result;
   }
@@ -251,18 +263,30 @@ function useEditor() {
   function changeCaretPosition(block: LineBlock, position: number) {
     assert(!!block.target, "No dom node associate with this block: " + block.id);
     const result = a(block.target, 0);
-    console.log(position, result);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (position >= item[1] && position <= item[2]) {
           const selection = document.getSelection();
           assert(!!selection, "no selection");
-          console.log(item[0], position - item[1]);
           selection.collapse(item[0], position - item[1]);
           return;
         }
       }
     }
+  }
+
+  function getBlockIndentLevel(block: LineBlock) {
+    let indent = 0;
+    let parent = block.parent;
+    while (parent) {
+      if (isLineBlock(parent)) {
+        indent += 1;
+        parent = parent.parent;
+      } else {
+        break;
+      }
+    }
+    return indent;
   }
 
   function moveCaret(direction: "up" | "down" | "left" | "right") {
@@ -272,12 +296,10 @@ function useEditor() {
     if (!block) return;
 
     let nextBlock: LineBlock | null = null;
-    let fromCaret = getBlockCaretPosition(block);
     if (direction === "down") {
       const children = Array.from(block.children);
       if (children.length) {
         nextBlock = children[0];
-        fromCaret = Math.max(0, fromCaret - 3);
       } else if (block.next) {
         nextBlock = block.next;
       } else if (isLineBlock(block.parent)) {
@@ -285,46 +307,58 @@ function useEditor() {
         while (!nextBlock && isLineBlock(parent)) {
           nextBlock = parent.next;
           parent = parent.parent;
-          fromCaret = fromCaret + 3;
         }
       }
     }
     if (direction === "up") {
       if (block.prev && Array.from(block.prev.children).length) {
         let tail = block.prev.children._tail;
-        fromCaret = Math.max(0, fromCaret - 3);
         while (tail && Array.from(tail.children).length) {
           tail = tail.children._tail;
-          fromCaret = Math.max(0, fromCaret - 3);
         }
         if (tail) nextBlock = tail;
       } else if (block.prev) {
         nextBlock = block.prev;
       } else if (isLineBlock(block.parent)) {
         nextBlock = block.parent;
-        fromCaret = fromCaret + 3;
       }
     }
 
-    if (nextBlock && nextBlock.target) {
-      const toTextLen = nextBlock.target.textContent?.length ?? 0;
-      console.log({ fromCaret, toTextLen });
+    if ((direction === "up" || direction === "down") && nextBlock && nextBlock.target) {
+      const addition = getBlockIndentLevel(block) * 3;
+      const nextBlockAddition = getBlockIndentLevel(nextBlock) * 3;
+      let fromCaret = getBlockCaretPosition(block) + addition;
+      const toTextLen = (nextBlock.target.textContent?.length ?? 0) + nextBlockAddition;
       if (fromCaret > toTextLen && !intentCaret.current) {
-        intentCaret.current = fromCaret;
+        intentCaret.current = fromCaret + addition;
         nextBlock.target.focus();
-        changeCaretPosition(nextBlock, toTextLen);
+        changeCaretPosition(nextBlock, toTextLen - nextBlockAddition);
         return;
       }
+
       if (intentCaret.current) {
         nextBlock.target.focus();
-        changeCaretPosition(nextBlock, Math.min(intentCaret.current, toTextLen));
+        changeCaretPosition(
+          nextBlock,
+          Math.min(intentCaret.current, toTextLen) - nextBlockAddition,
+        );
+        return;
       }
+
       nextBlock.target.focus();
-      changeCaretPosition(nextBlock, fromCaret);
+      changeCaretPosition(nextBlock, fromCaret - nextBlockAddition);
+      return;
+    }
+    if (direction === "left" || direction === "right") {
+      if (intentCaret.current) intentCaret.current = undefined;
     }
   }
 
-  return { blocks: blockRef.current, registerBlock, moveCaret, rerender };
+  function resetIntentCaret() {
+    intentCaret.current = undefined;
+  }
+
+  return { blocks: blockRef.current, registerBlock, moveCaret, resetIntentCaret, rerender };
 }
 
 function composeEventHandlers<E>(
