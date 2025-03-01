@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { BlockList, createBlockList, LineBlock, RootBlock } from "./block";
+import { BlockList, createBlockList, IBlock, LineBlock, RootBlock } from "./block";
 
 export function Editor() {
   const editor = useEditor();
@@ -95,6 +95,14 @@ export function Block({ editor, block }: BlockProps) {
               const grandParent = block.parent.parent;
               grandParent.children.insertBlockAfter(block.parent, block);
             }
+            if (key === "arrowup") {
+              event.preventDefault();
+              editor.moveCaret("up");
+            }
+            if (key === "arrowdown") {
+              event.preventDefault();
+              editor.moveCaret("down");
+            }
           }}
           // onKeyUp={() => editor.updateCaretPosition(block)}
           // onClick={() => editor.updateCaretPosition(block)}
@@ -153,12 +161,12 @@ type CommandPromptState = {
 function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
+  const mapRef = useRef<Map<HTMLElement, LineBlock>>(new Map());
 
   useEffect(() => {
     if (!blockRef.current) return;
     function attachEvent(children: BlockList<LineBlock>) {
       const handler = () => {
-        console.log("flush sync");
         flushSync(() => setRender((prev) => !prev));
       };
       children.on("delete-block", handler);
@@ -178,8 +186,10 @@ function useEditor() {
   function registerBlock(block: LineBlock) {
     return (current: HTMLDivElement) => {
       block.target = current;
+      mapRef.current.set(current, block);
       return () => {
         block.target = current;
+        mapRef.current.delete(current);
       };
     };
   }
@@ -188,7 +198,45 @@ function useEditor() {
     flushSync(() => setRender((prev) => !prev));
   }
 
-  return { blocks: blockRef.current, registerBlock, rerender };
+  function moveCaret(direction: "up" | "down" | "left" | "right") {
+    const element = document.activeElement;
+    if (!element || !(element instanceof HTMLElement)) return;
+    const block = mapRef.current.get(element);
+    if (!block) return;
+    let nextBlock: LineBlock | null = null;
+    if (direction === "down") {
+      const children = Array.from(block.children);
+      if (children.length) nextBlock = children[0];
+      else if (block.next) nextBlock = block.next;
+      else if (isLineBlock(block.parent)) {
+        let parent: LineBlock | RootBlock = block.parent;
+        while (!nextBlock && isLineBlock(parent)) {
+          nextBlock = parent.next;
+          parent = parent.parent;
+        }
+      }
+    }
+    if (direction === "up") {
+      if (block.prev && Array.from(block.prev.children).length) {
+        let tail = block.prev.children._tail;
+        while (tail && Array.from(tail.children).length) {
+          console.log("b");
+          tail = tail.children._tail;
+        }
+        if (tail) nextBlock = tail;
+      } else if (block.prev) {
+        nextBlock = block.prev;
+      } else if (isLineBlock(block.parent)) {
+        nextBlock = block.parent;
+      }
+    }
+
+    if (nextBlock && nextBlock.target) {
+      nextBlock.target.focus();
+    }
+  }
+
+  return { blocks: blockRef.current, registerBlock, moveCaret, rerender };
 }
 
 function composeEventHandlers<E>(
@@ -284,9 +332,9 @@ function assert(value: boolean, message?: string): asserts value {
 //   textContent?: string;
 // }
 
-// function isLineBlock(block: IBlock): block is LineBlock {
-//   return block.type === "block";
-// }
+function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
+  return block.type === "block";
+}
 
 // function isInlineOption(block: IBlock): block is InlineBlock {
 //   return block.type === "inline-option";
