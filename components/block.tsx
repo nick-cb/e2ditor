@@ -3,7 +3,7 @@ import { assert } from "@/lib/utils";
 export interface IBlock {
   id: string;
   type: string;
-  target: HTMLDivElement | null;
+  target: Node | null;
   next: IBlock | null;
   prev: IBlock | null;
 }
@@ -24,11 +24,23 @@ export class InlineBlock implements IBlock {
   id = crypto.randomUUID();
   constructor(
     public type: string,
-    public target: HTMLDivElement | null,
-    public next: IBlock | null,
-    public prev: IBlock | null,
     public parent: LineBlock | RootBlock,
+    public target: Node | null = null,
+    public next: IBlock | null = null,
+    public prev: IBlock | null = null,
   ) {}
+}
+
+export class TextBlock extends InlineBlock {
+  content: string | null = null;
+  constructor(
+    public parent: LineBlock | RootBlock,
+    public target: Node | null = null,
+    public next: IBlock | null = null,
+    public prev: IBlock | null = null,
+  ) {
+    super("text", parent, target, next, prev);
+  }
 }
 
 export class LineBlock implements IBlock {
@@ -60,10 +72,16 @@ export interface BlockList<Block extends IBlock> {
   insertBlockBefore(block: Block, newBlock: Block): Block;
   deleteBlock(block: Block): Block;
   getLastBlock(): Block | null;
-  createBlock(type: "block" | "inline-option"): LineBlock;
+  createBlock<T extends BlockType>(type: T): CreateBlockReturns<T>;
   on(event: BlockListEvents, callback: (event: Event) => void): void;
   [Symbol.iterator](): Generator<Block, void, unknown>;
 }
+
+type BlockType = "block" | "inline-option" | "text";
+type CreateBlockReturns<T extends BlockType> =
+  T extends "block" ? LineBlock
+  : T extends "text" ? TextBlock
+  : InlineBlock;
 
 export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineBlock) {
   const eventTarget = new EventTarget();
@@ -118,9 +136,6 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
         this._root = block;
       }
       if ("parent" in block) block.parent = parent;
-      // if (!block.parent && block !== this._root) {
-      //   block.parent = this._root;
-      // }
       const event = new CustomEvent("add-block-to-start", { detail: block });
       eventTarget.dispatchEvent(event);
       return block;
@@ -176,6 +191,10 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
         const block = new LineBlock(null, null, null, parent);
         const event = new CustomEvent("create-block", { detail: block });
         eventTarget.dispatchEvent(event);
+        return block;
+      }
+      if (type === "text" && parent) {
+        const block = new TextBlock(parent);
         return block;
       }
       throw new Error("invalid type");

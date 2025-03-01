@@ -11,7 +11,15 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { BlockList, createBlockList, IBlock, LineBlock, RootBlock } from "./block";
+import {
+  BlockList,
+  createBlockList,
+  IBlock,
+  InlineBlock,
+  LineBlock,
+  RootBlock,
+  TextBlock,
+} from "./block";
 import { Button } from "./ui/button";
 import { GripVerticalIcon } from "lucide-react";
 
@@ -104,8 +112,8 @@ export function Block({ editor, block }: BlockProps) {
               block.parent.children.deleteBlock(block);
               const grandParent = block.parent.parent;
               grandParent.children.insertBlockAfter(block.parent, block);
-              assert(!!block.target, 'no dom node: ' + block.id)
-              block.target.focus()
+              assert(!!block.target, "no dom node: " + block.id);
+              block.target.focus();
               return;
             }
             if (key === "arrowup") {
@@ -132,6 +140,12 @@ export function Block({ editor, block }: BlockProps) {
           // onClick={() => editor.updateCaretPosition(block)}
           className={"w-full flex items-center"}
         >
+          {Array.from(block.inlineChildren).map((child) => {
+            if (child.type === "text") {
+              return child.content;
+            }
+            return null;
+          })}
           {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
           {/* {block.inlineChildren.map((child) => { */}
           {/*   if (isInlineOption(child)) { */}
@@ -186,12 +200,47 @@ function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
   const mapRef = useRef<Map<HTMLElement, LineBlock>>(new Map());
+  const textMapRef = useRef<Map<Node, TextBlock>>(new Map());
   const intentCaret = useRef<number | undefined>(undefined);
+  const [contentChangeObserver] = useState(
+    new MutationObserver((entries) => {
+      for (const entry of entries) {
+        console.log("a");
+        if (entry.type === "characterData") {
+          const block = textMapRef.current.get(entry.target);
+          if (!block) continue;
+          block.content = entry.target.textContent;
+        }
+      }
+    }),
+  );
+
+  const [observer] = useState(
+    new MutationObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.type === "childList" && entry.target instanceof HTMLElement) {
+          console.log("b");
+          const block = mapRef.current.get(entry.target);
+          if (!block) return;
+          for (const node of entry.addedNodes) {
+            if (node.nodeType === 3) {
+              const newTextBlock = block.inlineChildren.createBlock("text");
+              newTextBlock.target = node;
+              block.inlineChildren.addBlockToStart(newTextBlock);
+              textMapRef.current.set(node, newTextBlock);
+              contentChangeObserver.observe(node, { characterData: true });
+            }
+          }
+        }
+      }
+    }),
+  );
 
   useEffect(() => {
     if (!blockRef.current) return;
-    function attachEvent(children: BlockList<LineBlock>) {
+    function attachEvent(children: BlockList<IBlock>) {
       const handler = () => {
+        console.log("RUN");
         flushSync(() => setRender((prev) => !prev));
       };
       children.on("delete-block", handler);
@@ -201,7 +250,9 @@ function useEditor() {
       children.on("insert-block-after", handler);
       children.on("create-block", (event) => {
         if ("detail" in event && event.detail instanceof LineBlock) {
+          console.log(event.detail);
           attachEvent(event.detail.children);
+          attachEvent(event.detail.inlineChildren);
         }
       });
     }
@@ -212,6 +263,7 @@ function useEditor() {
     return (current: HTMLDivElement) => {
       block.target = current;
       mapRef.current.set(current, block);
+      observer.observe(current, { subtree: true, childList: true });
       return () => {
         block.target = current;
         mapRef.current.delete(current);
