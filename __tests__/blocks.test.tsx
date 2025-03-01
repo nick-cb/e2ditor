@@ -94,6 +94,20 @@ test("editor be able to delete a block", () => {
   checkLoop(editor);
 });
 
+test("delete last child", () => {
+  const editor = createEditor();
+  const newBlock = editor.children.createBlock("block");
+  editor.children.addBlockToEnd(newBlock);
+  const newBlock2 = editor.children.createBlock("block");
+
+  editor.children.addBlockToEnd(newBlock2);
+  expect(Array.from(editor.children).length).toBe(2);
+  expect(newBlock.next).toBe(newBlock2);
+
+  editor.children.deleteBlock(newBlock2);
+  expect(newBlock.next).toBe(null);
+});
+
 test("move a block as the child of another block", () => {
   const editor = createEditor();
   const newBlock = editor.children.createBlock("block");
@@ -110,6 +124,31 @@ test("move a block as the child of another block", () => {
   expect(Array.from(newBlock.children)[0]).toBe(block2);
 
   checkLoop(editor);
+});
+
+test("move a middle block as the child of previous block using `addBlockToEnd`", () => {
+  const editor = createEditor();
+  const newBlock = editor.children.createBlock("block");
+  editor.children.addBlockToStart(newBlock);
+
+  const newBlock2 = editor.children.createBlock("block");
+  editor.children.addBlockToEnd(newBlock2);
+  expect(Array.from(editor.children).length).toBe(2);
+
+  const newBlock3 = editor.children.createBlock("block");
+  editor.children.addBlockToEnd(newBlock3);
+  expect(Array.from(editor.children).length).toBe(3);
+
+  editor.children.deleteBlock(newBlock2);
+  expect(Array.from(newBlock.children).length).toBe(0);
+
+  newBlock.children.addBlockToEnd(newBlock2);
+  expect(Array.from(editor.children).length).toBe(2);
+  expect(Array.from(newBlock.children).length).toBe(1);
+  expect(Array.from(newBlock.children)[0]).toBe(newBlock2);
+  expect(newBlock2.next).toBe(null);
+  expect(newBlock2.prev).toBe(null);
+  expect(newBlock.next).toBe(newBlock3);
 });
 
 function checkLoop(root: RootBlock) {
