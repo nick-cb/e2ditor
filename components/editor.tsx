@@ -78,12 +78,12 @@ export function Block({ editor, block }: BlockProps) {
               const parent = block.parent;
               parent.children.deleteBlock(block);
               prev.children.addBlockToEnd(block);
-              // editor.rerender();
               assert(!!block.target, "no dom node: " + block.id);
               block.target.focus();
             }
             if (event.shiftKey && key === "tab") {
               event.preventDefault();
+              console.log(block.parent);
               if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
               while (nextBlock) {
@@ -93,7 +93,6 @@ export function Block({ editor, block }: BlockProps) {
               }
               block.parent.children.deleteBlock(block);
               const grandParent = block.parent.parent;
-              console.log({ parent: block.parent, grandParent: block.parent.parent });
               grandParent.children.insertBlockAfter(block.parent, block);
             }
           }}
@@ -132,7 +131,7 @@ export function Block({ editor, block }: BlockProps) {
       {Array.from(block.children).map((child) => {
         return (
           <div key={child.id} className={"pl-4"}>
-            <Block editor={editor} block={child as LineBlock} />
+            <Block editor={editor} block={child} />
           </div>
         );
       })}

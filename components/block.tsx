@@ -90,10 +90,13 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
       if (!this._root) {
         this._root = block;
         this._tail = block;
+        block.next = null;
+        block.prev = null;
       } else {
         assert(block !== this._tail, "cannot be the same tail block");
         assert(!!this._tail, "no tail block");
         block.prev = this._tail;
+        block.next = null;
         this._tail.next = block;
         this._tail = block;
       }
@@ -130,7 +133,7 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
       block.next = newBlock;
       newBlock.next = next;
       newBlock.prev = block;
-      if ("parent" in block) block.parent = parent;
+      if ("parent" in newBlock) newBlock.parent = parent;
 
       const event = new CustomEvent("insert-block-after", { detail: block });
       eventTarget.dispatchEvent(event);
@@ -145,7 +148,7 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
       prev.next = newBlock;
       newBlock.next = block;
       block.prev = newBlock;
-      if ("parent" in block) block.parent = parent;
+      if ("parent" in newBlock) newBlock.parent = parent;
 
       const event = new CustomEvent("insert-block-before", { detail: block });
       eventTarget.dispatchEvent(event);

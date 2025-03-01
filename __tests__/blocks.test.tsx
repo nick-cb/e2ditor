@@ -151,6 +151,31 @@ test("move a middle block as the child of previous block using `addBlockToEnd`",
   expect(newBlock.next).toBe(newBlock3);
 });
 
+test("move a middle block as the child of previous block using `insertBlockAfter`", () => {
+  const editor = createEditor();
+  const newBlock = editor.children.createBlock("block");
+  editor.children.addBlockToStart(newBlock);
+  const newBlock2 = editor.children.createBlock("block");
+  editor.children.addBlockToEnd(newBlock2);
+  expect(Array.from(editor.children).length).toBe(2);
+
+  const block2 = editor.children.deleteBlock(newBlock2);
+  expect(Array.from(editor.children).length).toBe(1);
+
+  newBlock.children.addBlockToEnd(block2);
+  expect(Array.from(newBlock.children).length).toBe(1);
+  expect(Array.from(newBlock.children)[0]).toBe(block2);
+
+  newBlock.children.deleteBlock(newBlock2);
+  newBlock.parent.children.insertBlockAfter(newBlock, newBlock2);
+  expect(Array.from(newBlock.children).length).toBe(0);
+  expect(Array.from(editor.children).length).toBe(2);
+  expect(newBlock.next).toBe(newBlock2);
+  expect(newBlock2.next).toBe(null);
+
+  checkLoop(editor);
+});
+
 function checkLoop(root: RootBlock) {
   const visited = new Map<string, number>();
   for (const child of root.children) {
