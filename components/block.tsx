@@ -6,7 +6,6 @@ export interface IBlock {
   target: HTMLDivElement | null;
   next: IBlock | null;
   prev: IBlock | null;
-  parent: IBlock;
 }
 
 // export interface IRootBlock {
@@ -18,7 +17,7 @@ export interface IBlock {
 export class RootBlock {
   id = crypto.randomUUID();
   type = "root";
-  children = createBlockList<LineBlock>();
+  children = createBlockList<LineBlock>(this);
 }
 
 export class InlineBlock implements IBlock {
@@ -28,28 +27,28 @@ export class InlineBlock implements IBlock {
     public target: HTMLDivElement | null,
     public next: IBlock | null,
     public prev: IBlock | null,
-    public parent: LineBlock,
+    public parent: LineBlock | RootBlock,
   ) {}
 }
 
 export class LineBlock implements IBlock {
   id = crypto.randomUUID();
   type = "block";
-  children = createBlockList<LineBlock>();
-  inlineChildren = createBlockList<InlineBlock>();
+  children: BlockList<LineBlock> = createBlockList<LineBlock>(this);
+  inlineChildren = createBlockList<InlineBlock>(this);
   constructor(
     public target: HTMLDivElement | null = null,
     public next: LineBlock | null = null,
     public prev: LineBlock | null = null,
-    public parent: IBlock,
+    public parent: LineBlock | RootBlock,
   ) {}
 }
 
 type BlockListEvents =
   | "add-block-to-end"
   | "add-block-to-start"
-  | "add-block-to-after"
-  | "add-block-to-before"
+  | "insert-block-after"
+  | "insert-block-before"
   | "delete-block"
   | "create-block";
 export interface BlockList<Block extends IBlock> {
@@ -66,7 +65,7 @@ export interface BlockList<Block extends IBlock> {
   [Symbol.iterator](): Generator<Block, void, unknown>;
 }
 
-export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
+export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineBlock) {
   const eventTarget = new EventTarget();
   // const events = {
   //   "add-block-to-start": new CustomEvent("add-block-to-start"),
@@ -99,9 +98,7 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
         this._tail = block;
       }
       this._tail = block;
-      if (!block.parent && block !== this._root) {
-        block.parent = this._root;
-      }
+      if ("parent" in block) block.parent = parent;
       const event = new CustomEvent("add-block-to-end", { detail: block });
       eventTarget.dispatchEvent(event);
       return block;
@@ -117,9 +114,10 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
         this._root.prev = block;
         this._root = block;
       }
-      if (!block.parent && block !== this._root) {
-        block.parent = this._root;
-      }
+      if ("parent" in block) block.parent = parent;
+      // if (!block.parent && block !== this._root) {
+      //   block.parent = this._root;
+      // }
       const event = new CustomEvent("add-block-to-start", { detail: block });
       eventTarget.dispatchEvent(event);
       return block;
@@ -132,8 +130,9 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
       block.next = newBlock;
       newBlock.next = next;
       newBlock.prev = block;
+      if ("parent" in block) block.parent = parent;
 
-      const event = new CustomEvent("add-block-to-after", { detail: block });
+      const event = new CustomEvent("insert-block-after", { detail: block });
       eventTarget.dispatchEvent(event);
       return newBlock;
     },
@@ -146,8 +145,9 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
       prev.next = newBlock;
       newBlock.next = block;
       block.prev = newBlock;
+      if ("parent" in block) block.parent = parent;
 
-      const event = new CustomEvent("add-block-to-before", { detail: block });
+      const event = new CustomEvent("insert-block-before", { detail: block });
       eventTarget.dispatchEvent(event);
       return newBlock;
     },
@@ -169,8 +169,8 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock) {
       return this._tail;
     },
     createBlock(type) {
-      if (type === "block") {
-        const block = new LineBlock(null, null, null, this._root ?? parent);
+      if (type === "block" && parent) {
+        const block = new LineBlock(null, null, null, parent);
         const event = new CustomEvent("create-block", { detail: block });
         eventTarget.dispatchEvent(event);
         return block;

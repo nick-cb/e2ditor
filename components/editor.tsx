@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { createBlockList, LineBlock, RootBlock } from "./block";
+import { BlockList, createBlockList, LineBlock, RootBlock } from "./block";
 
 export function Editor() {
   const editor = useEditor();
@@ -64,6 +64,7 @@ export function Block({ editor, block }: BlockProps) {
             const key = event.key.toLowerCase();
             if (!event.shiftKey && key === "enter") {
               const parent = block.parent;
+              console.log({ parent });
               const newBlock = parent.children.insertBlockAfter(
                 block,
                 parent.children.createBlock("block"),
@@ -74,28 +75,26 @@ export function Block({ editor, block }: BlockProps) {
             if (!event.shiftKey && key === "tab") {
               const prev = block.prev;
               if (!prev) return;
-              editor.blocks.deleteBlock(block);
+              const parent = block.parent;
+              parent.children.deleteBlock(block);
               prev.children.addBlockToEnd(block);
-              editor.rerender();
+              // editor.rerender();
               assert(!!block.target, "no dom node: " + block.id);
               block.target.focus();
-              debugger;
             }
             if (event.shiftKey && key === "tab") {
               event.preventDefault();
-              if (!block.parent) return;
+              if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
               while (nextBlock) {
                 block.parent.children.deleteBlock(nextBlock);
                 block.children.addBlockToEnd(nextBlock);
                 nextBlock = nextBlock.next;
               }
-              debugger;
               block.parent.children.deleteBlock(block);
-              const parent = block.parent.parent ? block.parent.parent.children : editor.blocks;
-              parent.insertBlockAfter(block, block.parent);
-              assert(!!block.target, "no dom node: " + block.id);
-              block.target.focus();
+              const grandParent = block.parent.parent;
+              console.log({ parent: block.parent, grandParent: block.parent.parent });
+              grandParent.children.insertBlockAfter(block.parent, block);
             }
           }}
           // onKeyUp={() => editor.updateCaretPosition(block)}
@@ -155,42 +154,26 @@ type CommandPromptState = {
 function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
-  // const proxy = useMemo(() => {
-  //   return new Proxy(blockRef.current, {
-  //     get(target, prop, receiver) {
-  //       // @ts-ignore
-  //       const value = target[prop];
-  //       if (value instanceof Function) {
-  //         return function (...args: any[]) {
-  //           // @ts-ignore
-  //           const returns = value.apply(this === receiver ? target : this, args);
-  //           if (
-  //             [
-  //               "addBlockToStart",
-  //               "addBlockToEnd",
-  //               "insertBlockAfter",
-  //               "insertBlockBefore",
-  //               "deleteBlock",
-  //               "getLastBlock",
-  //             ].includes(value.name)
-  //           ) {
-  //             flushSync(() => setRender((prev) => !prev));
-  //           }
-  //           return returns;
-  //         };
-  //       }
-  //       return value;
-  //     },
-  //   });
-  // }, [blockRef.current]);
+
   useEffect(() => {
     if (!blockRef.current) return;
-    const handler = () => {
-      flushSync(() => setRender((prev) => !prev));
-    };
-    blockRef.current.children.on("delete-block", handler);
-    blockRef.current.children.on("add-block-to-end", handler);
-    blockRef.current.children.on("add-block-to-start", handler);
+    function attachEvent(children: BlockList<LineBlock>) {
+      const handler = () => {
+        console.log("flush sync");
+        flushSync(() => setRender((prev) => !prev));
+      };
+      children.on("delete-block", handler);
+      children.on("add-block-to-end", handler);
+      children.on("add-block-to-start", handler);
+      children.on("insert-block-before", handler);
+      children.on("insert-block-after", handler);
+      children.on("create-block", (event) => {
+        if ("detail" in event && event.detail instanceof LineBlock) {
+          attachEvent(event.detail.children);
+        }
+      });
+    }
+    attachEvent(blockRef.current.children);
   }, [blockRef]);
 
   function registerBlock(block: LineBlock) {
