@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
+import { renderToString, renderToStaticMarkup } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,12 +18,14 @@ import {
   createBlockList,
   IBlock,
   InlineBlock,
+  InlineOptionBlock,
   LineBlock,
   RootBlock,
   TextBlock,
 } from "./block";
 import { Button } from "./ui/button";
 import { GripVerticalIcon } from "lucide-react";
+import { InlineOption } from "./inline-option";
 
 let i = 0;
 export function Editor() {
@@ -50,7 +54,7 @@ export function Editor() {
         })}
         {/* <CommandPrompt editor={editor} /> */}
       </div>
-      {/* <CommandPrompt2 editor={editor} /> */}
+      <CommandPrompt2 editor={editor} />
     </div>
   );
 }
@@ -82,10 +86,21 @@ export function Block({ editor, block }: BlockProps) {
           suppressContentEditableWarning
           onKeyDown={(event) => {
             const key = event.key.toLowerCase();
-            if (key === "arrowleft") editor.moveCaret("left");
-            if (key === "arrowright") editor.moveCaret("right");
-            event.preventDefault();
             if (!event.shiftKey && key === "enter") {
+              event.preventDefault();
+              if (editor.commandPromptState.open) {
+                const inlineOption = editor.insertInlineOption(block);
+                // const selection = document.getSelection();
+                // assert(!!selection, "selection is null");
+                // editor.closeCommandPrompt();
+                // const inlineOption1 = inlineOption.children[0];
+                // assert(
+                //   !!inlineOption1.target,
+                //   "No dom node associate with this block: " + block.id,
+                // );
+                // editor.collapseCaretToNode(inlineOption1.target, 0);
+                return;
+              }
               const parent = block.parent;
               const newBlock = parent.children.insertBlockAfter(
                 block,
@@ -96,6 +111,7 @@ export function Block({ editor, block }: BlockProps) {
               return;
             }
             if (!event.shiftKey && key === "tab") {
+              event.preventDefault();
               const prev = block.prev;
               if (!prev) return;
               const parent = block.parent;
@@ -107,6 +123,7 @@ export function Block({ editor, block }: BlockProps) {
               return;
             }
             if (event.shiftKey && key === "tab") {
+              event.preventDefault();
               if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
               while (nextBlock) {
@@ -122,66 +139,43 @@ export function Block({ editor, block }: BlockProps) {
               block.target.focus();
               return;
             }
-            if (key === "arrowup") editor.moveCaret("up");
-            if (key === "arrowdown") editor.moveCaret("down");
-            editor.resetIntentCaret();
-            const lastInlineChildren = block.inlineChildren._tail;
-            if (!event.metaKey && !event.shiftKey && !event.ctrlKey) {
-              if (lastInlineChildren && lastInlineChildren.type === "text") {
-                lastInlineChildren.content += event.key;
-                console.log(lastInlineChildren.target)
-                editor.rerender();
-                const selection = document.getSelection();
-                assert(!!selection, "no selection");
-                selection.collapse(lastInlineChildren.target, lastInlineChildren.content.length);
-                // editor.changeCaretPosition(lastInlineChildren,)
-                // assert(!!block.target, 'no dom node: ' + block.id)
-                // block.target.focus();
-                // editor.moveCaret("right");
-              } else {
-                const newTextBlock = block.inlineChildren.createBlock("text");
-                newTextBlock.content = event.key;
-                block.inlineChildren.addBlockToEnd(newTextBlock);
-                const selection = document.getSelection();
-                assert(!!selection, "no selection");
-                selection.collapse(newTextBlock.target, newTextBlock.content.length);
-                // assert(!!block.target, "no dom node: " + block.id);
-                // block.target.focus();
-                // editor.moveCaret("right");
-              }
+            if (key === "arrowup") {
+              event.preventDefault();
+              editor.moveCaret("up");
             }
+            if (key === "arrowdown") {
+              event.preventDefault();
+              editor.moveCaret("down");
+            }
+            if (key === "arrowleft") editor.moveCaret("left");
+            if (key === "arrowright") editor.moveCaret("right");
+            if (key === "/") {
+              event.preventDefault();
+              const span = document.createElement("span");
+              span.textContent = "/";
+              assert(!!block.target, "no dom node: " + block.id);
+              block.target.append(span);
+              editor.openCommandPrompt(block, span);
+            }
+            editor.resetIntentCaret();
           }}
-          onInput={() => console.log("input")}
+          onInput={(event) => {
+            event.preventDefault();
+            console.log("input");
+          }}
+          onInputCapture={(event) => event.preventDefault()}
           // onKeyUp={() => editor.updateCaretPosition(block)}
           // onClick={() => editor.updateCaretPosition(block)}
           className={"w-full flex items-center"}
         >
-          {Array.from(block.inlineChildren).map((child) => {
-            if (child.type === "text") return child.content;
-            return null;
-          })}
+          {/* {Array.from(block.inlineChildren).map((child) => { */}
+          {/*   if (child.type === "text") return child.content; */}
+          {/*   return null; */}
+          {/* })} */}
           {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
           {/* {block.inlineChildren.map((child) => { */}
           {/*   if (isInlineOption(child)) { */}
           {/*     return ( */}
-          {/*       <React.Fragment key={child.id}> */}
-          {/*         <div className={"inline-option flex items-center"}> */}
-          {/*           <div */}
-          {/*             // ref={editor.registerBlock(child.inlineChildren[0])} */}
-          {/*             key={child.inlineChildren[0].id} */}
-          {/*             contentEditable */}
-          {/*             suppressContentEditableWarning */}
-          {/*             className={"px-1 min-h-6 bg-red-200"} */}
-          {/*           /> */}
-          {/*         </div> */}
-          {/*         <div */}
-          {/*           // ref={editor.registerBlock(child.inlineChildren[0])} */}
-          {/*           key={child.inlineChildren[0].id} */}
-          {/*           contentEditable */}
-          {/*           suppressContentEditableWarning */}
-          {/*           className={"px-1 min-h-6 bg-green-200"} */}
-          {/*         ></div> */}
-          {/*       </React.Fragment> */}
           {/*     ); */}
           {/*   } */}
           {/*   return null; */}
@@ -227,6 +221,13 @@ function useEditor() {
       // }
     }),
   );
+  const [commandPromptState, setCommandPromptState] = useState<CommandPromptState>({
+    block: null,
+    anchor: null,
+    open: false,
+    left: 0,
+    top: 0,
+  });
 
   const [observer] = useState(
     new MutationObserver((entries) => {
@@ -437,14 +438,60 @@ function useEditor() {
     }
     if (direction === "left" || direction === "right") {
       if (intentCaret.current) intentCaret.current = undefined;
-      let fromCaret = getBlockCaretPosition(block);
+      // let fromCaret = getBlockCaretPosition(block);
       // console.log({ fromCaret });
-      changeCaretPosition(block, fromCaret + 1);
+      // changeCaretPosition(block, fromCaret + 1);
     }
   }
 
   function resetIntentCaret() {
     intentCaret.current = undefined;
+  }
+
+  function openCommandPrompt(block: IBlock, anchor: HTMLElement) {
+    // assert(!!block.el, "No dom node associate with this block: " + block.id);
+    const elementRect = anchor.getBoundingClientRect();
+    const selection = document.getSelection();
+    assert(!!selection, "no selection");
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+
+    flushSync(() =>
+      setCommandPromptState({
+        block,
+        anchor,
+        open: true,
+        left: rect.left,
+        top: rect.top + elementRect.height,
+      }),
+    );
+    selection.collapse(anchor.childNodes[0], 1);
+  }
+
+  function closeCommandPrompt() {
+    const block = commandPromptState.block;
+    if (!block || !commandPromptState.anchor) return;
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    block.target.removeChild(commandPromptState.anchor);
+    setCommandPromptState((prev) => ({ ...prev, open: false }));
+  }
+
+  function insertInlineOption(block: LineBlock) {
+    const div = document.createElement("div");
+    div.style.display = "flex";
+    div.style.alignItems = "center";
+    assert(!!block.target, "No dom node associate with this block: " + block.id);
+    block.target.appendChild(div);
+    const inlineOption = block.inlineChildren.createBlock("inline-option");
+    block.inlineChildren.addBlockToEnd(inlineOption);
+    const option1 = inlineOption.inlineChildren.createBlock("text");
+    const option2 = inlineOption.inlineChildren.createBlock("text");
+    inlineOption.inlineChildren.addBlockToEnd(option1);
+    inlineOption.inlineChildren.addBlockToEnd(option2);
+
+    const result = renderToStaticMarkup(<InlineOption child={inlineOption} />);
+    div.innerHTML = result;
+    rerender();
   }
 
   return {
@@ -454,6 +501,10 @@ function useEditor() {
     changeCaretPosition,
     resetIntentCaret,
     rerender,
+    commandPromptState,
+    openCommandPrompt,
+    closeCommandPrompt,
+    insertInlineOption,
   };
 }
 

@@ -8,12 +8,6 @@ export interface IBlock {
   prev: IBlock | null;
 }
 
-// export interface IRootBlock {
-//   id: string;
-//   type: string;
-//   children: BlockList<LineBlock>;
-// }
-
 export class RootBlock {
   id = crypto.randomUUID();
   type = "root";
@@ -26,6 +20,19 @@ export class InlineBlock implements IBlock {
     public type: string,
     public parent: LineBlock | RootBlock,
     public target: Node | null = null,
+    public next: IBlock | null = null,
+    public prev: IBlock | null = null,
+  ) {}
+}
+
+export class InlineOptionBlock implements IBlock {
+  id = crypto.randomUUID();
+  type: string = "inline-option";
+  target: Node | null = null;
+  inlineChildren = createBlockList<InlineBlock>(this);
+
+  constructor(
+    public parent: LineBlock | RootBlock,
     public next: IBlock | null = null,
     public prev: IBlock | null = null,
   ) {}
@@ -48,12 +55,52 @@ export class LineBlock implements IBlock {
   type = "block";
   children: BlockList<LineBlock> = createBlockList<LineBlock>(this);
   inlineChildren = createBlockList<InlineBlock>(this);
+  #target: HTMLDivElement | null = null;
+  #observer = new MutationObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.type === "childList") {
+        if (entry.addedNodes.length) {
+          for (const addedNode of entry.addedNodes) {
+            if (addedNode.nodeType === 3) {
+              const newTextBlock = this.inlineChildren.createBlock("text");
+              newTextBlock.target = entry.target;
+              this.inlineChildren.addBlockToEnd(newTextBlock);
+            }
+          }
+        }
+
+        if (entry.removedNodes.length) {
+          for (const removedNode of entry.removedNodes) {
+            for (const child of this.inlineChildren) {
+              if (removedNode === child.target) {
+                this.inlineChildren.deleteBlock(child);
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  get target() {
+    return this.#target;
+  }
+
+  set target(value) {
+    this.#target = value;
+    if (this.#target) {
+      this.#observer.observe(this.#target, { childList: true, subtree: true });
+    }
+  }
+
   constructor(
-    public target: HTMLDivElement | null = null,
+    target: HTMLDivElement | null = null,
     public next: LineBlock | null = null,
     public prev: LineBlock | null = null,
     public parent: LineBlock | RootBlock,
-  ) {}
+  ) {
+    this.#target = target;
+  }
 }
 
 type BlockListEvents =
@@ -81,6 +128,7 @@ type BlockType = "block" | "inline-option" | "text";
 type CreateBlockReturns<T extends BlockType> =
   T extends "block" ? LineBlock
   : T extends "text" ? TextBlock
+  : T extends "inline-option" ? InlineOptionBlock
   : InlineBlock;
 
 export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineBlock) {
@@ -99,7 +147,7 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
     *[Symbol.iterator]() {
       let block = this._root;
       while (block) {
-        console.log("d")
+        console.log("d");
         yield block;
         // @ts-ignore@ts-ignore
         block = block.next;
@@ -196,6 +244,12 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
       }
       if (type === "text" && parent) {
         const block = new TextBlock(parent);
+        return block;
+      }
+      if (type === "inline-option" && parent) {
+        const block = new InlineOptionBlock(parent, null, null);
+        const event = new CustomEvent("create-block", { detail: block });
+        eventTarget.dispatchEvent(event);
         return block;
       }
       throw new Error("invalid type");
