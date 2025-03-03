@@ -99,6 +99,7 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
     *[Symbol.iterator]() {
       let block = this._root;
       while (block) {
+        console.log("d")
         yield block;
         // @ts-ignore@ts-ignore
         block = block.next;

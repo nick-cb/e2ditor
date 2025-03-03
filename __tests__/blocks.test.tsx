@@ -176,6 +176,15 @@ test("move a middle block as the child of previous block using `insertBlockAfter
   checkLoop(editor);
 });
 
+test("editor be able to add new inline block", () => {
+  const editor = createEditor();
+  const newBlock = editor.children.createBlock("block");
+  editor.children.addBlockToEnd(newBlock);
+  const newTextBlock = newBlock.inlineChildren.createBlock("text");
+  newBlock.inlineChildren.addBlockToStart(newTextBlock);
+  expect(Array.from(newBlock.inlineChildren).length).toBe(1);
+});
+
 function checkLoop(root: RootBlock) {
   const visited = new Map<string, number>();
   for (const child of root.children) {
