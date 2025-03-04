@@ -90,15 +90,9 @@ export function Block({ editor, block }: BlockProps) {
               event.preventDefault();
               if (editor.commandPromptState.open) {
                 const inlineOption = editor.insertInlineOption(block);
-                // const selection = document.getSelection();
-                // assert(!!selection, "selection is null");
-                // editor.closeCommandPrompt();
-                // const inlineOption1 = inlineOption.children[0];
-                // assert(
-                //   !!inlineOption1.target,
-                //   "No dom node associate with this block: " + block.id,
-                // );
-                // editor.collapseCaretToNode(inlineOption1.target, 0);
+                editor.closeCommandPrompt();
+                console.log({ inlineOption });
+                editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
                 return;
               }
               const parent = block.parent;
@@ -168,10 +162,12 @@ export function Block({ editor, block }: BlockProps) {
           // onClick={() => editor.updateCaretPosition(block)}
           className={"w-full flex items-center"}
         >
-          {/* {Array.from(block.inlineChildren).map((child) => { */}
-          {/*   if (child.type === "text") return child.content; */}
-          {/*   return null; */}
-          {/* })} */}
+          {Array.from(block.inlineChildren).map((child) => {
+            if (child.type === "inline-option") {
+              return <InlineOption key={child.id} child={child} editor={editor} />;
+            }
+            return null;
+          })}
           {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
           {/* {block.inlineChildren.map((child) => { */}
           {/*   if (isInlineOption(child)) { */}
@@ -204,7 +200,7 @@ type CommandPromptState = {
   top: number;
   left: number;
 };
-function useEditor() {
+export function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
   const mapRef = useRef<Map<HTMLElement, LineBlock>>(new Map());
@@ -295,7 +291,7 @@ function useEditor() {
     return (current: HTMLDivElement) => {
       block.target = current;
       mapRef.current.set(current, block);
-      observer.observe(current, { subtree: true, childList: true });
+      // observer.observe(current, { subtree: true, childList: true });
       return () => {
         block.target = current;
         mapRef.current.delete(current);
@@ -444,6 +440,16 @@ function useEditor() {
     }
   }
 
+  function moveCaretTo(block: IBlock) {
+    assert(!!block.target);
+    const result = a(block.target, 0);
+    if (result.length === 0) {
+      const selection = document.getSelection();
+      assert(!!selection);
+      selection.collapse(block.target);
+    }
+  }
+
   function resetIntentCaret() {
     intentCaret.current = undefined;
   }
@@ -483,15 +489,13 @@ function useEditor() {
     assert(!!block.target, "No dom node associate with this block: " + block.id);
     block.target.appendChild(div);
     const inlineOption = block.inlineChildren.createBlock("inline-option");
-    block.inlineChildren.addBlockToEnd(inlineOption);
     const option1 = inlineOption.inlineChildren.createBlock("text");
     const option2 = inlineOption.inlineChildren.createBlock("text");
     inlineOption.inlineChildren.addBlockToEnd(option1);
     inlineOption.inlineChildren.addBlockToEnd(option2);
+    block.inlineChildren.addBlockToEnd(inlineOption);
 
-    const result = renderToStaticMarkup(<InlineOption child={inlineOption} />);
-    div.innerHTML = result;
-    rerender();
+    return inlineOption;
   }
 
   return {
@@ -505,6 +509,7 @@ function useEditor() {
     openCommandPrompt,
     closeCommandPrompt,
     insertInlineOption,
+    moveCaretTo,
   };
 }
 
