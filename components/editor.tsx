@@ -203,20 +203,7 @@ export function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
   const mapRef = useRef<Map<HTMLElement, IBlock>>(new Map());
-  const textMapRef = useRef<Map<Node, TextBlock>>(new Map());
   const intentCaret = useRef<number | undefined>(undefined);
-  const [contentChangeObserver] = useState(
-    new MutationObserver((entries) => {
-      // console.log(entries)
-      // for (const entry of entries) {
-      //   if (entry.type === "characterData") {
-      //     const block = textMapRef.current.get(entry.target);
-      //     if (!block) continue;
-      //     block.content = entry.target.textContent;
-      //   }
-      // }
-    }),
-  );
   const [commandPromptState, setCommandPromptState] = useState<CommandPromptState>({
     block: null,
     anchor: null,
@@ -225,50 +212,10 @@ export function useEditor() {
     top: 0,
   });
 
-  const [observer] = useState(
-    new MutationObserver((entries) => {
-      // if (i > 2) {
-      //   observer.disconnect();
-      //   return;
-      // }
-      for (const entry of entries) {
-        if (entry.type === "childList" && entry.target instanceof HTMLElement) {
-          console.log(entry.addedNodes, entry.removedNodes);
-          // const block = mapRef.current.get(entry.target);
-          // if (!block) return;
-          // for (const node of entry.addedNodes) {
-          //   if (node.nodeType === 3) {
-          //     let ignore = false;
-          //     for (const child of block.inlineChildren) {
-          //       if (child.target === node) {
-          //         ignore = true;
-          //       }
-          //     }
-          //     if (ignore) continue;
-          //     const newTextBlock = block.inlineChildren.createBlock("text");
-          //     newTextBlock.target = node;
-          //     block.inlineChildren.addBlockToStart(newTextBlock);
-          //     textMapRef.current.set(node, newTextBlock);
-          //     contentChangeObserver.observe(node, { characterData: true });
-          //   }
-          // }
-        }
-      }
-      // i += 1;
-    }),
-  );
-
   useEffect(() => {
     if (!blockRef.current) return;
     function attachEvent(children: BlockList<IBlock>) {
       const handler = (event: Event) => {
-        if ("detail" in event) {
-          // const detail = event.detail;
-          // if (!isBlock(detail)) return;
-          // if (isInlineOption(detail) && detail.type === "text") {
-          //   return;
-          // }
-        }
         flushSync(() => setRender((prev) => !prev));
       };
       children.on("delete-block", handler);
@@ -317,9 +264,6 @@ export function useEditor() {
         }
       }
     }
-    // if (!node.childNodes.length) {
-    //   result.push([node, startOffSet, startOffSet + 1]);
-    // }
 
     return result;
   }

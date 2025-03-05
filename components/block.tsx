@@ -43,7 +43,7 @@ export class LineBlock implements IBlock {
   id = crypto.randomUUID();
   type: BlockType = "block";
   children: BlockList<LineBlock> = createBlockList<LineBlock>(this);
-  inlineChildren = createBlockList<InlineBlock>(this);
+  inlineChildren = createBlockList<InlineOptionBlock | TextBlock>(this);
   #target: HTMLDivElement | null = null;
   #observer = new MutationObserver((entries) => {
     for (const entry of entries) {
@@ -125,7 +125,7 @@ type CreateBlockReturns<T extends BlockType> =
   : T extends "inline-option" ? InlineOptionBlock
   : unknown;
 
-export function createBlockList<Block extends IBlock>(parent?: IBlock) {
+export function createBlockList<Block extends IBlock>(parent?: RootBlock | IBlock) {
   const eventTarget = new EventTarget();
   // const events = {
   //   "add-block-to-start": new CustomEvent("add-block-to-start"),
@@ -237,7 +237,7 @@ export function createBlockList<Block extends IBlock>(parent?: IBlock) {
         return block as any;
       }
       if (type === "text" && parent) {
-        const block = new TextBlock(parent);
+        const block = new TextBlock(parent as any);
         return block as any;
       }
       if (type === "inline-option" && parent && ["root", "block"].includes(parent.type)) {
