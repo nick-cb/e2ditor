@@ -2,7 +2,7 @@ import { assert } from "@/lib/utils";
 
 export interface IBlock {
   id: string;
-  type: string;
+  type: BlockType;
   target: Node | null;
   next: IBlock | null;
   prev: IBlock | null;
@@ -10,26 +10,15 @@ export interface IBlock {
 
 export class RootBlock {
   id = crypto.randomUUID();
-  type = "root";
+  type: BlockType = "root";
   children = createBlockList<LineBlock>(this);
-}
-
-export class InlineBlock implements IBlock {
-  id = crypto.randomUUID();
-  constructor(
-    public type: string,
-    public parent: LineBlock | RootBlock,
-    public target: Node | null = null,
-    public next: IBlock | null = null,
-    public prev: IBlock | null = null,
-  ) {}
 }
 
 export class InlineOptionBlock implements IBlock {
   id = crypto.randomUUID();
-  type: string = "inline-option";
+  type: "inline-option" = "inline-option";
   target: Node | null = null;
-  inlineChildren = createBlockList<InlineBlock>(this);
+  inlineChildren = createBlockList<TextBlock>(this);
 
   constructor(
     public parent: LineBlock | RootBlock,
@@ -38,21 +27,21 @@ export class InlineOptionBlock implements IBlock {
   ) {}
 }
 
-export class TextBlock extends InlineBlock {
+export class TextBlock implements IBlock {
+  id: string = crypto.randomUUID();
+  type: "text" = "text";
   content: string | null = null;
   constructor(
-    public parent: LineBlock | RootBlock,
+    public parent: IBlock,
     public target: Node | null = null,
     public next: IBlock | null = null,
     public prev: IBlock | null = null,
-  ) {
-    super("text", parent, target, next, prev);
-  }
+  ) {}
 }
 
 export class LineBlock implements IBlock {
   id = crypto.randomUUID();
-  type = "block";
+  type: BlockType = "block";
   children: BlockList<LineBlock> = createBlockList<LineBlock>(this);
   inlineChildren = createBlockList<InlineBlock>(this);
   #target: HTMLDivElement | null = null;
@@ -119,19 +108,24 @@ export interface BlockList<Block extends IBlock> {
   insertBlockBefore(block: Block, newBlock: Block): Block;
   deleteBlock(block: Block): Block;
   getLastBlock(): Block | null;
-  createBlock<T extends BlockType>(type: T): CreateBlockReturns<T>;
+  createBlock<T extends BlockType>(
+    type: T,
+  ): T extends "block" ? LineBlock
+  : T extends "text" ? TextBlock
+  : T extends "inline-option" ? InlineOptionBlock
+  : unknown;
   on(event: BlockListEvents, callback: (event: Event) => void): void;
   [Symbol.iterator](): Generator<Block, void, unknown>;
 }
 
-type BlockType = "block" | "inline-option" | "text";
+type BlockType = "root" | "block" | "inline-option" | "text";
 type CreateBlockReturns<T extends BlockType> =
   T extends "block" ? LineBlock
   : T extends "text" ? TextBlock
   : T extends "inline-option" ? InlineOptionBlock
-  : InlineBlock;
+  : unknown;
 
-export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineBlock) {
+export function createBlockList<Block extends IBlock>(parent?: IBlock) {
   const eventTarget = new EventTarget();
   // const events = {
   //   "add-block-to-start": new CustomEvent("add-block-to-start"),
@@ -236,21 +230,21 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
       return this._tail;
     },
     createBlock(type) {
-      if (type === "block" && parent) {
-        const block = new LineBlock(null, null, null, parent);
+      if (type === "block" && parent && ["root", "block"].includes(parent.type)) {
+        const block = new LineBlock(null, null, null, parent as any);
         const event = new CustomEvent("create-block", { detail: block });
         eventTarget.dispatchEvent(event);
-        return block;
+        return block as any;
       }
       if (type === "text" && parent) {
         const block = new TextBlock(parent);
-        return block;
+        return block as any;
       }
-      if (type === "inline-option" && parent) {
-        const block = new InlineOptionBlock(parent, null, null);
+      if (type === "inline-option" && parent && ["root", "block"].includes(parent.type)) {
+        const block = new InlineOptionBlock(parent as any, null, null);
         const event = new CustomEvent("create-block", { detail: block });
         eventTarget.dispatchEvent(event);
-        return block;
+        return block as any;
       }
       throw new Error("invalid type");
     },
@@ -260,4 +254,14 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | LineB
   };
 
   return blocks;
+}
+
+const blockList = createBlockList<InlineOptionBlock | TextBlock>();
+Array.from(blockList).map((b) => {
+  if (b.type === "text") {
+  }
+});
+
+function isBlock(type: BlockType): type is "block" {
+  return type === "block";
 }

@@ -17,7 +17,6 @@ import {
   BlockList,
   createBlockList,
   IBlock,
-  InlineBlock,
   InlineOptionBlock,
   LineBlock,
   RootBlock,
@@ -91,7 +90,7 @@ export function Block({ editor, block }: BlockProps) {
               if (editor.commandPromptState.open) {
                 const inlineOption = editor.insertInlineOption(block);
                 editor.closeCommandPrompt();
-                console.log({ inlineOption });
+                // console.log({ inlineOption });
                 editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
                 return;
               }
@@ -203,11 +202,12 @@ type CommandPromptState = {
 export function useEditor() {
   const [render, setRender] = useState(false);
   const blockRef = useRef(new RootBlock());
-  const mapRef = useRef<Map<HTMLElement, LineBlock>>(new Map());
+  const mapRef = useRef<Map<HTMLElement, IBlock>>(new Map());
   const textMapRef = useRef<Map<Node, TextBlock>>(new Map());
   const intentCaret = useRef<number | undefined>(undefined);
   const [contentChangeObserver] = useState(
     new MutationObserver((entries) => {
+      // console.log(entries)
       // for (const entry of entries) {
       //   if (entry.type === "characterData") {
       //     const block = textMapRef.current.get(entry.target);
@@ -287,7 +287,7 @@ export function useEditor() {
     attachEvent(blockRef.current.children);
   }, [blockRef]);
 
-  function registerBlock(block: LineBlock) {
+  function registerBlock(block: IBlock) {
     return (current: HTMLDivElement) => {
       block.target = current;
       mapRef.current.set(current, block);
@@ -376,7 +376,7 @@ export function useEditor() {
     const element = document.activeElement;
     if (!element || !(element instanceof HTMLElement)) return;
     const block = mapRef.current.get(element);
-    if (!block) return;
+    if (!block || !isLineBlock(block)) return;
 
     let nextBlock: LineBlock | null = null;
     if (direction === "down") {
@@ -482,6 +482,17 @@ export function useEditor() {
     setCommandPromptState((prev) => ({ ...prev, open: false }));
   }
 
+  // TODO: Figure out how to do this more efficiency
+  function observeContent(block: TextBlock) {
+    const contentChangeObserver = new MutationObserver((entries) => {
+      const entry = entries[0];
+      console.log(entries, entry.target.textContent);
+      block.content = entry.target.textContent;
+    });
+    assert(!!block.target, "no dom node: " + block.id);
+    contentChangeObserver.observe(block.target, { characterData: true, subtree: true });
+  }
+
   function insertInlineOption(block: LineBlock) {
     const div = document.createElement("div");
     div.style.display = "flex";
@@ -494,6 +505,8 @@ export function useEditor() {
     inlineOption.inlineChildren.addBlockToEnd(option1);
     inlineOption.inlineChildren.addBlockToEnd(option2);
     block.inlineChildren.addBlockToEnd(inlineOption);
+    observeContent(option1);
+    observeContent(option2);
 
     return inlineOption;
   }
@@ -610,10 +623,10 @@ function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
   return block.type === "block";
 }
 
-function isInlineOption(block: IBlock): block is InlineBlock {
-  return block.type === "inline-option";
-}
+// function isInlineOption(block: IBlock): block is InlineBlock {
+//   return block.type === "inline-option";
+// }
 
-function isBlock(block: any): block is IBlock {
-  return isLineBlock(block) || isInlineOption(block);
-}
+// function isBlock(block: any): block is IBlock {
+//   return isLineBlock(block) || isInlineOption(block);
+// }
