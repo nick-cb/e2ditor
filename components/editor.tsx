@@ -90,8 +90,9 @@ export function Block({ editor, block }: BlockProps) {
               if (editor.commandPromptState.open) {
                 const inlineOption = editor.insertInlineOption(block);
                 editor.closeCommandPrompt();
-                // console.log({ inlineOption });
                 editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
+                // console.log({ inlineOption });
+                // editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
                 return;
               }
               const parent = block.parent;
@@ -119,6 +120,7 @@ export function Block({ editor, block }: BlockProps) {
               event.preventDefault();
               if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
+              console.log({ nextBlock })
               while (nextBlock) {
                 block.parent.children.deleteBlock(nextBlock);
                 block.children.addBlockToEnd(nextBlock);
@@ -154,16 +156,16 @@ export function Block({ editor, block }: BlockProps) {
           }}
           onInput={(event) => {
             event.preventDefault();
-            console.log("input");
           }}
           onInputCapture={(event) => event.preventDefault()}
-          // onKeyUp={() => editor.updateCaretPosition(block)}
-          // onClick={() => editor.updateCaretPosition(block)}
           className={"w-full flex items-center"}
         >
           {Array.from(block.inlineChildren).map((child) => {
             if (child.type === "inline-option") {
               return <InlineOption key={child.id} child={child} editor={editor} />;
+            }
+            if (child.type ==='text' && !child.target?.isConnected) {
+              return child.content
             }
             return null;
           })}
@@ -225,7 +227,6 @@ export function useEditor() {
       children.on("insert-block-after", handler);
       children.on("create-block", (event) => {
         if ("detail" in event && event.detail instanceof LineBlock) {
-          console.log(event.detail);
           attachEvent(event.detail.children);
           attachEvent(event.detail.inlineChildren);
         }
@@ -238,7 +239,6 @@ export function useEditor() {
     return (current: HTMLDivElement) => {
       block.target = current;
       mapRef.current.set(current, block);
-      // observer.observe(current, { subtree: true, childList: true });
       return () => {
         block.target = current;
         mapRef.current.delete(current);
@@ -275,7 +275,6 @@ export function useEditor() {
     const endNode = selection.focusNode;
     const endOffset = selection.focusOffset;
     const result = a(block.target, 0);
-    console.log(result, endNode, endOffset, selection.anchorOffset);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (item[0] === endNode) {
@@ -430,7 +429,6 @@ export function useEditor() {
   function observeContent(block: TextBlock) {
     const contentChangeObserver = new MutationObserver((entries) => {
       const entry = entries[0];
-      console.log(entries, entry.target.textContent);
       block.content = entry.target.textContent;
     });
     assert(!!block.target, "no dom node: " + block.id);
@@ -444,13 +442,13 @@ export function useEditor() {
     assert(!!block.target, "No dom node associate with this block: " + block.id);
     block.target.appendChild(div);
     const inlineOption = block.inlineChildren.createBlock("inline-option");
-    const option1 = inlineOption.inlineChildren.createBlock("text");
-    const option2 = inlineOption.inlineChildren.createBlock("text");
+    const option1 = inlineOption.inlineChildren.createBlock("option");
+    const option2 = inlineOption.inlineChildren.createBlock("option");
     inlineOption.inlineChildren.addBlockToEnd(option1);
     inlineOption.inlineChildren.addBlockToEnd(option2);
     block.inlineChildren.addBlockToEnd(inlineOption);
-    observeContent(option1);
-    observeContent(option2);
+    // observeContent(option1);
+    // observeContent(option2);
 
     return inlineOption;
   }
