@@ -120,7 +120,6 @@ export function Block({ editor, block }: BlockProps) {
               event.preventDefault();
               if (block.parent instanceof RootBlock) return;
               let nextBlock = block.next;
-              console.log({ nextBlock })
               while (nextBlock) {
                 block.parent.children.deleteBlock(nextBlock);
                 block.children.addBlockToEnd(nextBlock);
@@ -137,10 +136,12 @@ export function Block({ editor, block }: BlockProps) {
             if (key === "arrowup") {
               event.preventDefault();
               editor.moveCaret("up");
+              return;
             }
             if (key === "arrowdown") {
               event.preventDefault();
               editor.moveCaret("down");
+              return;
             }
             if (key === "arrowleft") editor.moveCaret("left");
             if (key === "arrowright") editor.moveCaret("right");
@@ -164,8 +165,8 @@ export function Block({ editor, block }: BlockProps) {
             if (child.type === "inline-option") {
               return <InlineOption key={child.id} child={child} editor={editor} />;
             }
-            if (child.type ==='text' && !child.target?.isConnected) {
-              return child.content
+            if (child.type === "text" && !child.target?.isConnected) {
+              return child.content;
             }
             return null;
           })}
@@ -250,18 +251,30 @@ export function useEditor() {
     flushSync(() => setRender((prev) => !prev));
   }
 
-  function a(node: Node, startOffSet: number): any[] {
+  function a(node: Node, startOffSet: number, log: boolean): any[] {
     let result = [];
     for (const childNode of node.childNodes) {
+      if (log) {
+        console.log({ startOffSet, childNode, len: childNode.textContent?.length });
+      }
+      const children = [];
       if (childNode.nodeType === 3) {
-        result.push([childNode, startOffSet, (startOffSet += childNode.textContent?.length ?? 0)]);
-        startOffSet += 1;
+        children.push([
+          childNode,
+          startOffSet,
+          (startOffSet += childNode.textContent?.length ?? 0),
+        ]);
       } else {
-        result.push(...a(childNode, startOffSet));
-        const last = result.at(-1);
+        children.push(...a(childNode, startOffSet, false));
+        const last = children.at(-1);
         if (last) {
           startOffSet = last[2];
         }
+      }
+      console.log({ children });
+      if (children.length) {
+        startOffSet += 1;
+        result.push(...children);
       }
     }
 
@@ -274,10 +287,12 @@ export function useEditor() {
     assert(!!selection, "no selection");
     const endNode = selection.focusNode;
     const endOffset = selection.focusOffset;
-    const result = a(block.target, 0);
+    const result = a(block.target, 0, true);
+    console.log({ result });
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (item[0] === endNode) {
+          console.log({ item, endOffset });
           return item[1] + endOffset;
         }
       }
@@ -288,7 +303,7 @@ export function useEditor() {
 
   function changeCaretPosition(block: LineBlock, position: number) {
     assert(!!block.target, "No dom node associate with this block: " + block.id);
-    const result = a(block.target, 0);
+    const result = a(block.target, 0, false);
     for (const item of result) {
       if (item[0] instanceof Node) {
         if (position >= item[1] && position <= item[2]) {
@@ -355,7 +370,9 @@ export function useEditor() {
       const nextBlockAddition = getBlockIndentLevel(nextBlock) * 3;
       let fromCaret = getBlockCaretPosition(block) + addition;
       const toTextLen = (nextBlock.target.textContent?.length ?? 0) + nextBlockAddition;
+      console.log({ fromCaret, toTextLen, addition, nextBlockAddition });
       if (fromCaret > toTextLen && !intentCaret.current) {
+        console.log("update caret position", fromCaret);
         intentCaret.current = fromCaret;
         nextBlock.target.focus();
         changeCaretPosition(nextBlock, toTextLen - nextBlockAddition);
@@ -363,6 +380,7 @@ export function useEditor() {
       }
 
       if (intentCaret.current) {
+        console.log("restore caret position", intentCaret.current);
         nextBlock.target.focus();
         changeCaretPosition(
           nextBlock,
@@ -385,7 +403,7 @@ export function useEditor() {
 
   function moveCaretTo(block: IBlock) {
     assert(!!block.target);
-    const result = a(block.target, 0);
+    const result = a(block.target, 0, false);
     if (result.length === 0) {
       const selection = document.getSelection();
       assert(!!selection);
