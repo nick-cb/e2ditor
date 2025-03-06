@@ -153,6 +153,51 @@ export function Block({ editor, block }: BlockProps) {
               block.target.append(span);
               editor.openCommandPrompt(block, span);
             }
+            if (key === "backspace") {
+              // event.preventDefault();
+              // block.parent.children.deleteBlock(block);
+              assert(!!block.target, "no dom node: " + block.id);
+              const position = editor.getBlockCaretPosition(block);
+              if (position !== 0) return;
+              console.log(
+                "compare",
+                block === block.parent.children._tail,
+                isLineBlock(block.parent),
+              );
+
+              if (block === block.parent.children._tail && isLineBlock(block.parent)) {
+                block.parent.children.deleteBlock(block);
+                const grandparent = block.parent.parent;
+                block.parent.children.deleteBlock(block);
+                grandparent.children.insertBlockAfter(block.parent, block);
+                block.target.focus();
+                return;
+              }
+              let nextBlock: LineBlock | null = null;
+              if (block.prev && Array.from(block.prev.children).length) {
+                let tail = block.prev.children._tail;
+                while (tail && Array.from(tail.children).length) {
+                  tail = tail.children._tail;
+                }
+                if (tail) nextBlock = tail;
+              } else if (block.prev) {
+                nextBlock = block.prev;
+              } else if (isLineBlock(block.parent)) {
+                nextBlock = block.parent;
+              }
+              if (!nextBlock) return;
+              for (const child of block.inlineChildren) {
+                block.inlineChildren.deleteBlock(child);
+                nextBlock.inlineChildren.addBlockToEnd(child);
+              }
+              for (const child of block.children) {
+                block.children.deleteBlock(child);
+                nextBlock.parent.children.insertBlockAfter(block, child);
+              }
+              block.parent.children.deleteBlock(block);
+              assert(!!nextBlock.target, "no dom node: " + nextBlock.id);
+              nextBlock.target.focus();
+            }
             editor.resetIntentCaret();
           }}
           onInput={(event) => {
@@ -395,9 +440,6 @@ export function useEditor() {
     }
     if (direction === "left" || direction === "right") {
       if (intentCaret.current) intentCaret.current = undefined;
-      // let fromCaret = getBlockCaretPosition(block);
-      // console.log({ fromCaret });
-      // changeCaretPosition(block, fromCaret + 1);
     }
   }
 
@@ -483,6 +525,7 @@ export function useEditor() {
     closeCommandPrompt,
     insertInlineOption,
     moveCaretTo,
+    getBlockCaretPosition,
   };
 }
 
@@ -552,33 +595,6 @@ function assert(value: boolean, message?: string): asserts value {
   if (!value) throw new Error(message);
 }
 
-// interface IBlock {
-//   id: string;
-//   type: string;
-//   target: HTMLDivElement | null;
-// }
-
-// interface LineBlock extends IBlock {
-//   caretPos: number;
-//   parent: LineBlock | null;
-//   inlineChildren: IBlock | null;
-//   children: {
-//     _blocks: LineBlock | null;
-//     [Symbol.iterator](): Generator<LineBlock, void, unknown>;
-//   };
-//   next: LineBlock | null;
-//   prev: LineBlock | null;
-// }
-
-// interface InlineBlock extends IBlock {
-//   parent: IBlock;
-//   inlineChildren: InlineBlock[];
-// }
-
-// interface TextBlock extends IBlock {
-//   textContent?: string;
-// }
-
 function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
   return block.type === "block";
 }
@@ -590,3 +606,11 @@ function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
 // function isBlock(block: any): block is IBlock {
 //   return isLineBlock(block) || isInlineOption(block);
 // }
+
+function isRootblock(block: any): block is RootBlock {
+  return block.type === "root";
+}
+
+function isLineblock(block: any): block is LineBlock {
+  return block.type === "block";
+}
