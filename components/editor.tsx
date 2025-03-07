@@ -29,10 +29,13 @@ import { InlineOption } from "./inline-option";
 let i = 0;
 export function Editor() {
   const editor = useEditor();
+  const [selectStage, setSelectStage] = useState(0);
 
   return (
     <div className={"h-full"}>
       <div
+        contentEditable={true}
+        suppressContentEditableWarning
         onClick={(event) => {
           if (event.currentTarget !== event.target) return;
           const block = editor.blocks.children.createBlock("block");
@@ -40,12 +43,124 @@ export function Editor() {
           if (!lastBlock || (lastBlock.target && !!lastBlock.target.textContent)) {
             editor.blocks.children.addBlockToEnd(block);
             assert(!!block.target, "no dom node: " + block.id);
-            block.target.focus();
+            editor.changeCurrentBlock(block);
             return;
           }
           assert(!!lastBlock.target, "no dom node: " + lastBlock.id);
-          lastBlock.target.focus();
+          editor.changeCurrentBlock(block);
         }}
+        // onKeyDown={(event) => {
+        //   const key = event.key.toLowerCase();
+        //   console.log({key});
+        //   if (key === "enter") {
+        //     console.log(event.preventDefault());
+        //   }
+        // }}
+        onKeyDown={(event) => {
+          const key = event.key.toLowerCase();
+          const block = editor.currentBlock;
+          if (!block || !isLineBlock(block)) {
+            event.preventDefault();
+            return;
+          }
+          if (!event.shiftKey && key === "enter") {
+            event.preventDefault();
+            if (editor.commandPromptState.open) {
+              const inlineOption = editor.insertInlineOption(block);
+              editor.closeCommandPrompt();
+              editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
+              return;
+            }
+            const parent = block.parent;
+            const newBlock = parent.children.insertBlockAfter(
+              block,
+              parent.children.createBlock("block"),
+            );
+            assert(!!newBlock.target, "no dom node: " + newBlock.id);
+            editor.changeCurrentBlock(newBlock);
+            return;
+          }
+          if (!event.shiftKey && key === "tab") {
+            event.preventDefault();
+            const prev = block.prev;
+            if (!prev) return;
+            const parent = block.parent;
+            assert(!!block.target, "no dom node: " + block.id);
+            parent.children.deleteBlock(block);
+            prev.children.addBlockToEnd(block);
+            assert(!!block.target, "no dom node: " + block.id);
+            editor.changeCurrentBlock(block);
+            return;
+          }
+          if (event.shiftKey && key === "tab") {
+            event.preventDefault();
+            if (block.parent instanceof RootBlock) return;
+            let nextBlock = block.next;
+            while (nextBlock) {
+              block.parent.children.deleteBlock(nextBlock);
+              block.children.addBlockToEnd(nextBlock);
+              nextBlock = nextBlock.next;
+            }
+            assert(!!block.target, "no dom node: " + block.id);
+            block.parent.children.deleteBlock(block);
+            const grandParent = block.parent.parent;
+            grandParent.children.insertBlockAfter(block.parent, block);
+            assert(!!block.target, "no dom node: " + block.id);
+            editor.changeCurrentBlock(block);
+            return;
+          }
+          if (key === "/") {
+            event.preventDefault();
+            const span = document.createElement("span");
+            span.textContent = "/";
+            assert(!!block.target, "no dom node: " + block.id);
+            block.target.append(span);
+            editor.openCommandPrompt(block, span);
+          }
+          if (key === "backspace") {
+            // event.preventDefault();
+            // block.parent.children.deleteBlock(block);
+            assert(!!block.target, "no dom node: " + block.id);
+            const position = editor.getBlockCaretPosition(block);
+            if (position !== 0) return;
+
+            if (block === block.parent.children._tail && isLineBlock(block.parent)) {
+              block.parent.children.deleteBlock(block);
+              const grandparent = block.parent.parent;
+              block.parent.children.deleteBlock(block);
+              grandparent.children.insertBlockAfter(block.parent, block);
+              editor.changeCurrentBlock(block);
+              return;
+            }
+            let nextBlock: LineBlock | null = null;
+            if (block.prev && Array.from(block.prev.children).length) {
+              let tail = block.prev.children._tail;
+              while (tail && Array.from(tail.children).length) {
+                tail = tail.children._tail;
+              }
+              if (tail) nextBlock = tail;
+            } else if (block.prev) {
+              nextBlock = block.prev;
+            } else if (isLineBlock(block.parent)) {
+              nextBlock = block.parent;
+            }
+            if (!nextBlock) return;
+            for (const child of block.inlineChildren) {
+              block.inlineChildren.deleteBlock(child);
+              nextBlock.inlineChildren.addBlockToEnd(child);
+            }
+            for (const child of block.children) {
+              block.children.deleteBlock(child);
+              nextBlock.parent.children.insertBlockAfter(block, child);
+            }
+            block.parent.children.deleteBlock(block);
+            assert(!!nextBlock.target, "no dom node: " + nextBlock.id);
+            nextBlock.target.focus();
+            editor.changeCurrentBlock(block);
+          }
+          editor.resetIntentCaret();
+        }}
+        // onKeyUp={(event) => event.stopPropagation()}
         className={"min-h-full cursor-text"}
       >
         {Array.from(editor.blocks.children).map((block) => {
@@ -67,7 +182,7 @@ export function Block({ editor, block }: BlockProps) {
   const [render, setRender] = useState(false);
 
   return (
-    <div>
+    <div className={"w-full h-6"}>
       <div className={"flex relative items-center group"}>
         <Button
           size={"sm"}
@@ -83,128 +198,14 @@ export function Block({ editor, block }: BlockProps) {
           ref={ref}
           contentEditable
           suppressContentEditableWarning
-          onKeyDown={(event) => {
-            const key = event.key.toLowerCase();
-            if (!event.shiftKey && key === "enter") {
-              event.preventDefault();
-              if (editor.commandPromptState.open) {
-                const inlineOption = editor.insertInlineOption(block);
-                editor.closeCommandPrompt();
-                editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
-                // console.log({ inlineOption });
-                // editor.moveCaretTo(Array.from(inlineOption.inlineChildren)[0]);
-                return;
-              }
-              const parent = block.parent;
-              const newBlock = parent.children.insertBlockAfter(
-                block,
-                parent.children.createBlock("block"),
-              );
-              assert(!!newBlock.target, "no dom node: " + newBlock.id);
-              newBlock.target.focus();
-              return;
-            }
-            if (!event.shiftKey && key === "tab") {
-              event.preventDefault();
-              const prev = block.prev;
-              if (!prev) return;
-              const parent = block.parent;
-              assert(!!block.target, "no dom node: " + block.id);
-              parent.children.deleteBlock(block);
-              prev.children.addBlockToEnd(block);
-              assert(!!block.target, "no dom node: " + block.id);
-              block.target.focus();
-              return;
-            }
-            if (event.shiftKey && key === "tab") {
-              event.preventDefault();
-              if (block.parent instanceof RootBlock) return;
-              let nextBlock = block.next;
-              while (nextBlock) {
-                block.parent.children.deleteBlock(nextBlock);
-                block.children.addBlockToEnd(nextBlock);
-                nextBlock = nextBlock.next;
-              }
-              assert(!!block.target, "no dom node: " + block.id);
-              block.parent.children.deleteBlock(block);
-              const grandParent = block.parent.parent;
-              grandParent.children.insertBlockAfter(block.parent, block);
-              assert(!!block.target, "no dom node: " + block.id);
-              block.target.focus();
-              return;
-            }
-            if (key === "arrowup") {
-              event.preventDefault();
-              editor.moveCaret("up");
-              return;
-            }
-            if (key === "arrowdown") {
-              event.preventDefault();
-              editor.moveCaret("down");
-              return;
-            }
-            if (key === "arrowleft") editor.moveCaret("left");
-            if (key === "arrowright") editor.moveCaret("right");
-            if (key === "/") {
-              event.preventDefault();
-              const span = document.createElement("span");
-              span.textContent = "/";
-              assert(!!block.target, "no dom node: " + block.id);
-              block.target.append(span);
-              editor.openCommandPrompt(block, span);
-            }
-            if (key === "backspace") {
-              // event.preventDefault();
-              // block.parent.children.deleteBlock(block);
-              assert(!!block.target, "no dom node: " + block.id);
-              const position = editor.getBlockCaretPosition(block);
-              if (position !== 0) return;
-              console.log(
-                "compare",
-                block === block.parent.children._tail,
-                isLineBlock(block.parent),
-              );
-
-              if (block === block.parent.children._tail && isLineBlock(block.parent)) {
-                block.parent.children.deleteBlock(block);
-                const grandparent = block.parent.parent;
-                block.parent.children.deleteBlock(block);
-                grandparent.children.insertBlockAfter(block.parent, block);
-                block.target.focus();
-                return;
-              }
-              let nextBlock: LineBlock | null = null;
-              if (block.prev && Array.from(block.prev.children).length) {
-                let tail = block.prev.children._tail;
-                while (tail && Array.from(tail.children).length) {
-                  tail = tail.children._tail;
-                }
-                if (tail) nextBlock = tail;
-              } else if (block.prev) {
-                nextBlock = block.prev;
-              } else if (isLineBlock(block.parent)) {
-                nextBlock = block.parent;
-              }
-              if (!nextBlock) return;
-              for (const child of block.inlineChildren) {
-                block.inlineChildren.deleteBlock(child);
-                nextBlock.inlineChildren.addBlockToEnd(child);
-              }
-              for (const child of block.children) {
-                block.children.deleteBlock(child);
-                nextBlock.parent.children.insertBlockAfter(block, child);
-              }
-              block.parent.children.deleteBlock(block);
-              assert(!!nextBlock.target, "no dom node: " + nextBlock.id);
-              nextBlock.target.focus();
-            }
-            editor.resetIntentCaret();
+          onClick={() => {
+            editor.changeCurrentBlock(block);
           }}
           onInput={(event) => {
             event.preventDefault();
           }}
           onInputCapture={(event) => event.preventDefault()}
-          className={"w-full flex items-center"}
+          className={"w-full flex items-center h-6 bg-yellow-500"}
         >
           {Array.from(block.inlineChildren).map((child) => {
             if (child.type === "inline-option") {
@@ -259,6 +260,7 @@ export function useEditor() {
     left: 0,
     top: 0,
   });
+  const [block, setBlock] = useState<LineBlock | null>(null);
 
   useEffect(() => {
     if (!blockRef.current) return;
@@ -419,14 +421,14 @@ export function useEditor() {
       if (fromCaret > toTextLen && !intentCaret.current) {
         console.log("update caret position", fromCaret);
         intentCaret.current = fromCaret;
-        nextBlock.target.focus();
+        changeCurrentBlock(block);
         changeCaretPosition(nextBlock, toTextLen - nextBlockAddition);
         return;
       }
 
       if (intentCaret.current) {
         console.log("restore caret position", intentCaret.current);
-        nextBlock.target.focus();
+        changeCurrentBlock(block);
         changeCaretPosition(
           nextBlock,
           Math.min(intentCaret.current, toTextLen) - nextBlockAddition,
@@ -434,7 +436,7 @@ export function useEditor() {
         return;
       }
 
-      nextBlock.target.focus();
+      changeCurrentBlock(block);
       changeCaretPosition(nextBlock, fromCaret - nextBlockAddition);
       return;
     }
@@ -513,8 +515,23 @@ export function useEditor() {
     return inlineOption;
   }
 
+  function changeCurrentBlock(block: LineBlock) {
+    console.log(block.target);
+    assert(!!block.target, "no dom node: " + block.id);
+    const selection = document.getSelection();
+    assert(!!selection);
+    selection.collapse(block.target, 0);
+    setBlock(block);
+  }
+
+  function getBlockFromTarget(target: HTMLElement) {
+    return mapRef.current.get(target);
+  }
+
   return {
     blocks: blockRef.current,
+    currentBlock: block,
+    changeCurrentBlock,
     registerBlock,
     moveCaret,
     changeCaretPosition,
@@ -526,6 +543,7 @@ export function useEditor() {
     insertInlineOption,
     moveCaretTo,
     getBlockCaretPosition,
+    getBlockFromTarget,
   };
 }
 
