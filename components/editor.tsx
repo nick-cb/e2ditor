@@ -1,32 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal, flushSync } from "react-dom";
-import { renderToString, renderToStaticMarkup } from "react-dom/server";
-import { hydrateRoot } from "react-dom/client";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
-import { cn } from "@/lib/utils";
-import {
-  BlockList,
-  createBlockList,
-  IBlock,
-  InlineOptionBlock,
-  LineBlock,
-  RootBlock,
-  TextBlock,
-} from "./block";
-import { Button } from "./ui/button";
-import { GripVerticalIcon } from "lucide-react";
-import { InlineOption } from "./inline-option";
+import React, { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { assert, isLineBlock } from "@/lib/utils";
+import { BlockList, IBlock, LineBlock, RootBlock, TextBlock } from "./block";
+import { CommandPrompt2 } from "@/components/command-prompt";
+import { Block } from "@/components/editor-block";
 
-let i = 0;
 export function Editor() {
   const editor = useEditor();
   const [selectStage, setSelectStage] = useState(0);
@@ -173,75 +153,11 @@ export function Editor() {
   );
 }
 
-type BlockProps = {
-  editor: ReturnType<typeof useEditor>;
-  block: LineBlock;
-};
-export function Block({ editor, block }: BlockProps) {
-  const ref = useCallback(editor.registerBlock(block), []);
-  const [render, setRender] = useState(false);
-
-  return (
-    <div className={"w-full h-6"}>
-      <div className={"flex relative items-center group"}>
-        <Button
-          size={"sm"}
-          variant={"ghost"}
-          className={
-            "absolute left-0 -translate-x-full !w-max !h-max p-1 group-hover:opacity-100 opacity-0 transition-opacity"
-          }
-        >
-          <GripVerticalIcon />
-        </Button>
-        <div
-          id={block.id}
-          ref={ref}
-          contentEditable
-          suppressContentEditableWarning
-          onClick={() => {
-            editor.changeCurrentBlock(block);
-          }}
-          onInput={(event) => {
-            event.preventDefault();
-          }}
-          onInputCapture={(event) => event.preventDefault()}
-          className={"w-full flex items-center h-6 bg-yellow-500"}
-        >
-          {Array.from(block.inlineChildren).map((child) => {
-            if (child.type === "inline-option") {
-              return <InlineOption key={child.id} child={child} editor={editor} />;
-            }
-            if (child.type === "text" && !child.target?.isConnected) {
-              return child.content;
-            }
-            return null;
-          })}
-          {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
-          {/* {block.inlineChildren.map((child) => { */}
-          {/*   if (isInlineOption(child)) { */}
-          {/*     return ( */}
-          {/*     ); */}
-          {/*   } */}
-          {/*   return null; */}
-          {/* })} */}
-        </div>
-      </div>
-      {Array.from(block.children).map((child) => {
-        return (
-          <div key={child.id} className={"pl-[3ch]"}>
-            <Block editor={editor} block={child} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function EditorTitle() {
   return <div>Untitled Test</div>;
 }
 
-type CommandPromptState = {
+export type CommandPromptState = {
   block: IBlock | null;
   anchor: HTMLElement | null;
   open: boolean;
@@ -547,76 +463,6 @@ export function useEditor() {
   };
 }
 
-function composeEventHandlers<E>(
-  originalEventHandler?: (event: E) => void,
-  ourEventHandler?: (event: E) => void,
-  { checkForDefaultPrevented = true } = {},
-) {
-  return function handleEvent(event: E) {
-    originalEventHandler?.(event);
-
-    if (checkForDefaultPrevented === false || !(event as unknown as Event).defaultPrevented) {
-      return ourEventHandler?.(event);
-    }
-  };
-}
-
-function CommandPrompt2({ editor }: { editor: ReturnType<typeof useEditor> }) {
-  const commandPromptState = editor.commandPromptState;
-  const [selectItem, setSelectItem] = useState(0);
-  const [items, setItems] = useState([]);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (event: PointerEvent) => {
-      // @ts-ignore
-      if (menuRef.current?.contains(event.target)) editor.closeCommandPrompt();
-    };
-    document.addEventListener("pointerdown", handler);
-    return () => {
-      document.removeEventListener("pointerdown", handler);
-    };
-  }, []);
-
-  if (!commandPromptState.open) return;
-
-  return createPortal(
-    <div
-      role={"menu"}
-      data-state={"open"}
-      style={{ left: commandPromptState.left, top: commandPromptState.top }}
-      className={cn(
-        "fixed z-50 min-w-[8rem] pointer-events-auto overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md",
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-        "cursor-default",
-      )}
-    >
-      <div
-        role="menuitem"
-        className={cn(
-          "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground  data-[disabled]:opacity-50 [&amp;>svg]:size-4 [&amp;>svg]:shrink-0",
-          "hover:bg-accent hover:text-accent-foreground cursor-pointer",
-          selectItem === 0 && "bg-accent text-accent-foreground cursor-pointer",
-        )}
-        data-orientation="vertical"
-        data-radix-collection-item=""
-        data-highlight
-      >
-        Inline option
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-function assert(value: boolean, message?: string): asserts value {
-  if (!value) throw new Error(message);
-}
-
-function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
-  return block.type === "block";
-}
-
 // function isInlineOption(block: IBlock): block is InlineBlock {
 //   return block.type === "inline-option";
 // }
@@ -624,11 +470,3 @@ function isLineBlock(block: IBlock | RootBlock): block is LineBlock {
 // function isBlock(block: any): block is IBlock {
 //   return isLineBlock(block) || isInlineOption(block);
 // }
-
-function isRootblock(block: any): block is RootBlock {
-  return block.type === "root";
-}
-
-function isLineblock(block: any): block is LineBlock {
-  return block.type === "block";
-}
