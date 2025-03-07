@@ -15,7 +15,7 @@ export function Editor() {
       <div
         contentEditable={true}
         suppressContentEditableWarning
-        onClick={(event) => {
+        onMouseDown={(event) => {
           if (event.currentTarget !== event.target) return;
           const block = editor.blocks.children.createBlock("block");
           const lastBlock = editor.blocks.children.getLastBlock();

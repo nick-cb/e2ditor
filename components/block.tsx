@@ -292,12 +292,6 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | IBloc
   return blocks;
 }
 
-const blockList = createBlockList<InlineOptionBlock | TextBlock>();
-Array.from(blockList).map((b) => {
-  if (b.type === "text") {
-  }
-});
-
 function isBlock(type: BlockType): type is "block" {
   return type === "block";
 }
