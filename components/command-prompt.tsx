@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
-import { useEditor } from "@/components/editor";
+
+import { useEditor } from "@/components/useEditor";
 
 export function CommandPrompt2({ editor }: { editor: ReturnType<typeof useEditor> }) {
   const commandPromptState = editor.commandPromptState;

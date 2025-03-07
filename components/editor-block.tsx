@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { GripVerticalIcon } from "lucide-react";
 import { InlineOption } from "@/components/inline-option";
 import { LineBlock } from "@/components/block";
-import { useEditor } from "@/components/editor";
+
+import { useEditor } from "@/components/useEditor";
 
 export type BlockProps = {
   editor: ReturnType<typeof useEditor>;
@@ -15,7 +16,7 @@ export function Block({ editor, block }: BlockProps) {
   const [render, setRender] = useState(false);
 
   return (
-    <div className={"w-full h-6"}>
+    <div className={"w-full min-h-6"}>
       <div className={"flex relative items-center group"}>
         <Button
           size={"sm"}

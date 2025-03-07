@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { InlineOptionBlock } from "./block";
-import { useEditor } from "./editor";
+
+import { useEditor } from "@/components/useEditor";
 
 type InlineOptionProps = {
   child: InlineOptionBlock;

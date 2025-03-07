@@ -1,3 +1,5 @@
+'use client';
+
 import { assert } from "@/lib/utils";
 
 export interface IBlock {
