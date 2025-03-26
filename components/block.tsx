@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { assert } from "@/lib/utils";
 
@@ -19,14 +19,8 @@ export class RootBlock {
 export class InlineOptionBlock implements IBlock {
   id = crypto.randomUUID();
   type: "inline-option" = "inline-option";
-  #target: Node | null = null;
-  inlineChildren = createBlockList<Option>(this);
-  get target() {
-    return this.#target;
-  }
-  set target(value) {
-    this.#target = value;
-  }
+  target: Node | null = null;
+  inlineChildren: BlockList<OptionBlock> = createBlockList<OptionBlock>(this);
 
   constructor(
     public parent: LineBlock | RootBlock,
@@ -35,40 +29,14 @@ export class InlineOptionBlock implements IBlock {
   ) {}
 }
 
-export class Option implements IBlock {
+export class OptionBlock implements IBlock {
   id: string = crypto.randomUUID();
   type: BlockType = "option";
-  #target: Node | null = null;
-  get target() {
-    return this.#target;
-  }
-  set target(value) {
-    this.#target = value;
-    if (this.#target) {
-      const observer = new MutationObserver((entries) => {
-        for (const entry of entries) {
-          this.content = entry.target.textContent;
-        }
-      });
-      observer.observe(this.#target, { characterData: true, subtree: true });
-    }
-  }
+  target: Node | null = null;
   content: string | null = null;
 
   constructor(
-    public parent: LineBlock | RootBlock,
-    public next: IBlock | null = null,
-    public prev: IBlock | null = null,
-  ) {}
-}
-
-export class TextBlock implements IBlock {
-  id: string = crypto.randomUUID();
-  type: "text" = "text";
-  content: string | null = null;
-  constructor(
-    public parent: IBlock,
-    public target: Node | null = null,
+    public parent: InlineOptionBlock,
     public next: IBlock | null = null,
     public prev: IBlock | null = null,
   ) {}
@@ -78,41 +46,9 @@ export class LineBlock implements IBlock {
   id = crypto.randomUUID();
   type: BlockType = "block";
   children: BlockList<LineBlock> = createBlockList<LineBlock>(this);
-  inlineChildren = createBlockList<InlineOptionBlock | TextBlock>(this);
+  inlineChildren = createBlockList<InlineOptionBlock>(this);
   #target: HTMLDivElement | null = null;
-  #observer = new MutationObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.type === "childList") {
-        if (entry.addedNodes.length) {
-          for (const addedNode of entry.addedNodes) {
-            if (addedNode.nodeType === 3 && addedNode.parentNode?.isSameNode(this.target)) {
-              const newTextBlock = this.inlineChildren.createBlock("text");
-              newTextBlock.target = addedNode;
-              this.inlineChildren.addBlockToEnd(newTextBlock);
-            }
-          }
-        }
-
-        if (entry.removedNodes.length) {
-          for (const removedNode of entry.removedNodes) {
-            for (const child of this.inlineChildren) {
-              if (removedNode === child.target) {
-                this.inlineChildren.deleteBlock(child);
-              }
-            }
-          }
-        }
-      }
-
-      if (entry.type === "characterData") {
-        for (const child of this.inlineChildren) {
-          if (child.type === "text" && entry.target.isSameNode(child.target)) {
-            child.content = entry.target.textContent;
-          }
-        }
-      }
-    }
-  });
+  html: string | null = null;
 
   get target() {
     return this.#target;
@@ -120,9 +56,11 @@ export class LineBlock implements IBlock {
 
   set target(value) {
     this.#target = value;
-    if (this.#target) {
-      this.#observer.observe(this.#target, { childList: true, subtree: true, characterData: true });
-    }
+    const observer = new MutationObserver((entries) => {
+      this.html = this.#target?.innerHTML ?? null;
+    });
+    if (this.#target)
+      observer.observe(this.#target, { characterData: true, subtree: true, childList: true });
   }
 
   constructor(
@@ -151,13 +89,7 @@ export interface BlockList<Block extends IBlock> {
   insertBlockBefore(block: Block, newBlock: Block): Block;
   deleteBlock(block: Block): Block;
   getLastBlock(): Block | null;
-  createBlock<T extends BlockType>(
-    type: T,
-  ): T extends "block" ? LineBlock
-  : T extends "text" ? TextBlock
-  : T extends "inline-option" ? InlineOptionBlock
-  : T extends "option" ? Option
-  : unknown;
+  createBlock(): LineBlock;
   on(event: BlockListEvents, callback: (event: Event) => void): void;
   [Symbol.iterator](): Generator<Block, void, unknown>;
 }
@@ -259,30 +191,11 @@ export function createBlockList<Block extends IBlock>(parent?: RootBlock | IBloc
     getLastBlock() {
       return this._tail;
     },
-    createBlock(type) {
-      if (type === "block" && parent && ["root", "block"].includes(parent.type)) {
-        const block = new LineBlock(null, null, null, parent as any);
-        const event = new CustomEvent("create-block", { detail: block });
-        eventTarget.dispatchEvent(event);
-        return block as any;
-      }
-      if (type === "text" && parent) {
-        const block = new TextBlock(parent as any);
-        return block as any;
-      }
-      if (type === "inline-option" && parent && ["root", "block"].includes(parent.type)) {
-        const block = new InlineOptionBlock(parent as any, null, null);
-        const event = new CustomEvent("create-block", { detail: block });
-        eventTarget.dispatchEvent(event);
-        return block as any;
-      }
-      if (type === "option" && parent) {
-        const block = new Option(parent as any, null, null);
-        const event = new CustomEvent("create-block", { detail: block });
-        eventTarget.dispatchEvent(event);
-        return block as any;
-      }
-      throw new Error("invalid type");
+    createBlock() {
+      const block = new LineBlock(null, null, null, parent as any);
+      const event = new CustomEvent("create-block", { detail: block });
+      eventTarget.dispatchEvent(event);
+      return block;
     },
     on(event, callback) {
       eventTarget.addEventListener(event, callback);

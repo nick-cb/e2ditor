@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GripVerticalIcon } from "lucide-react";
 import { InlineOption } from "@/components/inline-option";
@@ -12,8 +12,18 @@ export type BlockProps = {
 };
 
 export function Block({ editor, block }: BlockProps) {
-  const ref = useCallback(editor.registerBlock(block), []);
-  const [render, setRender] = useState(false);
+  const a = useRef<HTMLDivElement>(null);
+  const ref = useCallback((current: HTMLDivElement) => {
+    a.current = current;
+    const fn = editor.registerBlock(block);
+    fn(current);
+  }, []);
+
+  useEffect(() => {
+    if (a.current && block.html) {
+      a.current.innerHTML = block.html;
+    }
+  }, []);
 
   return (
     <div className={"w-full min-h-6"}>
@@ -32,9 +42,9 @@ export function Block({ editor, block }: BlockProps) {
           ref={ref}
           contentEditable
           suppressContentEditableWarning
-          onClick={() => {
-            editor.changeCurrentBlock(block);
-          }}
+          // onClick={() => {
+          //   editor.changeCurrentBlock(block);
+          // }}
           onInput={(event) => {
             event.preventDefault();
           }}
@@ -43,21 +53,15 @@ export function Block({ editor, block }: BlockProps) {
         >
           {Array.from(block.inlineChildren).map((child) => {
             if (child.type === "inline-option") {
-              return <InlineOption key={child.id} child={child} editor={editor} />;
+              return (
+                <InlineOption key={child.id} block={child} registerBlock={editor.registerBlock} />
+              );
             }
-            if (child.type === "text" && !child.target?.isConnected) {
-              return child.content;
-            }
+            // if (child.type === "text" && !child.target?.isConnected) {
+            //   return child.content;
+            // }
             return null;
           })}
-          {/* <div className={'min-h-6 bg-blue-500 min-w-10'}></div> */}
-          {/* {block.inlineChildren.map((child) => { */}
-          {/*   if (isInlineOption(child)) { */}
-          {/*     return ( */}
-          {/*     ); */}
-          {/*   } */}
-          {/*   return null; */}
-          {/* })} */}
         </div>
       </div>
       {Array.from(block.children).map((child) => {

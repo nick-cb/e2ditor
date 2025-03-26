@@ -11,7 +11,7 @@ function createEditor() {
 
 test("editor be able to add new item to the end of the list", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock);
   let blockArr = Array.from(editor.children);
   let firstBlock = blockArr[0];
@@ -21,7 +21,7 @@ test("editor be able to add new item to the end of the list", () => {
   expect(lastBlock).toBe(newBlock);
   expect(lastBlock).toBe(firstBlock);
 
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock2);
   blockArr = Array.from(editor.children);
   lastBlock = blockArr.at(-1);
@@ -37,7 +37,7 @@ test("editor be able to add new item to the end of the list", () => {
 
 test("editor be able to add new item to the start of the list", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
   let blockArr = Array.from(editor.children);
   let firstBlock = blockArr[0];
@@ -47,7 +47,7 @@ test("editor be able to add new item to the start of the list", () => {
   expect(firstBlock).toBe(newBlock);
   expect(firstBlock).toBe(lastBlock);
 
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock2);
   blockArr = Array.from(editor.children);
   firstBlock = blockArr[0];
@@ -63,10 +63,10 @@ test("editor be able to add new item to the start of the list", () => {
 
 test("editor be able to add new block as 'next' LineBlock for a block", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
 
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.insertBlockAfter(newBlock, newBlock2);
   const blockArr = Array.from(editor.children);
   const lastBlock = blockArr.at(-1);
@@ -82,7 +82,7 @@ test("editor be able to add new block as 'next' LineBlock for a block", () => {
 
 test("editor be able to delete a block", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
   let blockArr = Array.from(editor.children);
   expect(blockArr.length).toBe(1);
@@ -96,9 +96,9 @@ test("editor be able to delete a block", () => {
 
 test("delete last child", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock);
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
 
   editor.children.addBlockToEnd(newBlock2);
   expect(Array.from(editor.children).length).toBe(2);
@@ -110,9 +110,9 @@ test("delete last child", () => {
 
 test("move a block as the child of another block", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock2);
   expect(Array.from(editor.children).length).toBe(2);
 
@@ -128,14 +128,14 @@ test("move a block as the child of another block", () => {
 
 test("move a middle block as the child of previous block using `addBlockToEnd`", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
 
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock2);
   expect(Array.from(editor.children).length).toBe(2);
 
-  const newBlock3 = editor.children.createBlock("block");
+  const newBlock3 = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock3);
   expect(Array.from(editor.children).length).toBe(3);
 
@@ -153,9 +153,9 @@ test("move a middle block as the child of previous block using `addBlockToEnd`",
 
 test("move a middle block as the child of previous block using `insertBlockAfter`", () => {
   const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
+  const newBlock = editor.children.createBlock();
   editor.children.addBlockToStart(newBlock);
-  const newBlock2 = editor.children.createBlock("block");
+  const newBlock2 = editor.children.createBlock();
   editor.children.addBlockToEnd(newBlock2);
   expect(Array.from(editor.children).length).toBe(2);
 
@@ -176,14 +176,14 @@ test("move a middle block as the child of previous block using `insertBlockAfter
   checkLoop(editor);
 });
 
-test("editor be able to add new inline block", () => {
-  const editor = createEditor();
-  const newBlock = editor.children.createBlock("block");
-  editor.children.addBlockToEnd(newBlock);
-  const newTextBlock = newBlock.inlineChildren.createBlock("text");
-  newBlock.inlineChildren.addBlockToStart(newTextBlock);
-  expect(Array.from(newBlock.inlineChildren).length).toBe(1);
-});
+// test("editor be able to add new inline block", () => {
+//   const editor = createEditor();
+//   const newBlock = editor.children.createBlock();
+//   editor.children.addBlockToEnd(newBlock);
+//   const newTextBlock = newBlock.inlineChildren.createBlock("text");
+//   newBlock.inlineChildren.addBlockToStart(newTextBlock);
+//   expect(Array.from(newBlock.inlineChildren).length).toBe(1);
+// });
 
 function checkLoop(root: RootBlock) {
   const visited = new Map<string, number>();
